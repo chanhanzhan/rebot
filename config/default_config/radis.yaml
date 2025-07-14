@@ -1,0 +1,29 @@
+# Redis数据库配置
+redis:
+  host: localhost
+  port: 6379
+  password: ""
+  db: 0
+  maxRetriesPerRequest: 3
+  retryDelayOnFailover: 100
+  enableReadyCheck: true
+  lazyConnect: true
+  connectTimeout: 10000
+  commandTimeout: 5000
+  
+# Redis连接池配置
+pool:
+  min: 2
+  max: 10
+  acquireTimeoutMillis: 30000
+  createTimeoutMillis: 30000
+  destroyTimeoutMillis: 5000
+  idleTimeoutMillis: 30000
+  reapIntervalMillis: 1000
+  createRetryIntervalMillis: 200
+
+# 缓存配置
+cache:
+  defaultTTL: 3600  # 默认过期时间(秒)
+  keyPrefix: "bot:cache:"
+  enableCompression: false

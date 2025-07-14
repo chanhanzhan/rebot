@@ -1,0 +1,30 @@
+{
+  "version": "1.0.0",
+  "lastSaved": "2025-07-14T00:00:00.000Z",
+  "statistics": {
+    "totalCommands": 0,
+    "hello": {
+      "totalUsage": 0,
+      "users": {}
+    },
+    "ping": {
+      "totalPings": 0,
+      "averageResponseTime": 0,
+      "lastPing": null
+    },
+    "status": {
+      "totalQueries": 0,
+      "lastQuery": null
+    }
+  },
+  "userPreferences": {
+    "greetingStyle": {},
+    "language": {},
+    "timezone": {}
+  },
+  "cache": {
+    "systemInfo": null,
+    "pluginStatus": null,
+    "lastUpdate": null
+  }
+}

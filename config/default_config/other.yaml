@@ -1,0 +1,41 @@
+# 其他通用配置
+general:
+  debug: false
+  maxMessageLength: 4000
+  commandPrefix: ["!", "/", "#"]
+  timezone: "Asia/Shanghai"
+  
+permissions:
+  default: user
+  adminIds: []
+  ownerIds: []
+  requirePermissionForPrivate: false
+
+features:
+  autoReconnect: true
+  messageLog: true
+  errorReporting: true
+  pluginHotReload: true
+  configHotReload: true
+
+# 安全配置
+security:
+  enableRateLimit: true
+  maxCommandsPerMinute: 30
+  maxMessageLength: 4000
+  blockedWords: []
+  trustedDomains: []
+
+# 性能配置
+performance:
+  maxConcurrentTasks: 10
+  taskTimeout: 30000
+  enableCache: true
+  cacheSize: 1000
+
+# 监控配置
+monitoring:
+  enableStats: true
+  statsInterval: 60000
+  enableHealthCheck: true
+  healthCheckInterval: 30000

@@ -1,0 +1,70 @@
+# Example Plugin 配置文件
+plugin:
+  name: "example-plugin"
+  version: "1.0.0"
+  description: "示例插件，展示插件开发的最佳实践"
+  author: "Bot Framework"
+  enabled: true
+  autoLoad: true
+  hotReload: true
+
+# 应用配置
+apps:
+  hello:
+    enabled: true
+    customGreetings:
+      - "你好呀！"
+      - "Hi！"
+      - "Hello！"
+    timeBasedGreeting: true
+    recordUsage: true
+  
+  ping:
+    enabled: true
+    showSystemInfo: true
+    recordStats: true
+    maxResponseTime: 1000
+  
+  status:
+    enabled: true
+    detailLevel: "normal"  # normal, detailed, full
+    cacheTime: 5000       # 缓存时间(毫秒)
+    showSensitiveInfo: false
+
+# 权限配置
+permissions:
+  hello: 1      # 用户权限
+  ping: 1       # 用户权限
+  status: 2     # 管理员权限
+  help: 1       # 用户权限
+
+# 数据配置
+data:
+  autoSave: true
+  saveInterval: 30000   # 自动保存间隔(毫秒)
+  backupCount: 5        # 备份文件数量
+  compression: false    # 是否压缩数据文件
+
+# 日志配置
+logging:
+  level: "info"         # debug, info, warn, error
+  logToFile: true
+  logToConsole: true
+  maxLogSize: "10MB"
+  maxLogFiles: 5
+
+# 性能配置
+performance:
+  enableCache: true
+  cacheSize: 100
+  cacheTTL: 300000      # 缓存过期时间(毫秒)
+  maxConcurrentTasks: 5
+  taskTimeout: 10000    # 任务超时时间(毫秒)
+
+# 安全配置
+security:
+  enableRateLimit: true
+  rateLimitWindow: 60000    # 速率限制窗口(毫秒)
+  rateLimitMax: 30          # 窗口内最大请求数
+  blockedUsers: []          # 黑名单用户
+  allowedCommands: []       # 白名单命令(空表示全部允许)
