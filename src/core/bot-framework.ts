@@ -67,7 +67,7 @@ export class BotFramework {
       await this.databaseManager.connect();
       Logger.info('数据库已连接');
       
-      // 加载插件（如果配置了自动加载）
+      // 加载插件
       const config = this.configManager.getConfig();
       if (config.plugins && config.plugins.autoLoad) {
         await this.loadPluginsFromDirectory(config.plugins.directory);
@@ -78,7 +78,7 @@ export class BotFramework {
       const configInit = ConfigInitializer.getInstance();
       const botConfig = configInit.getConfig('bot');
       
-      Logger.info('框架启动时获取的bot配置:', JSON.stringify(botConfig, null, 2));
+    //  Logger.info('框架启动时获取的bot配置:', JSON.stringify(botConfig, null, 2));
       
       if (botConfig) {
         await this.adapterManager.loadAdaptersFromConfig(botConfig);
@@ -184,7 +184,6 @@ export class BotFramework {
       const distPluginPath = path.join(process.cwd(), 'dist', 'plugins', pluginName);
       const indexJsPath = path.join(distPluginPath, 'index.js');
       
-      // 检查编译后的文件是否存在
       if (!fs.existsSync(indexJsPath)) {
         Logger.warn(`插件编译文件不存在: ${indexJsPath}`);
         return;

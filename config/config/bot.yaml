@@ -1,0 +1,94 @@
+# Bot框架主配置文件
+name: "Advanced Bot Framework"
+version: "1.0.0"
+debug: true
+
+adapters:
+  console:
+    enabled: true
+    username: "Console User"
+    permission: "OWNER"
+    prompt: "[控制台] "
+    enableHistory: true
+    historySize: 100
+    enableColors: true
+  
+  qq:
+    enabled: false
+    uin: 0  # QQ号
+    password: ""  # 密码（可选，支持扫码登录）
+    platform: 5  # 登录设备类型 (1:Android手机 2:aPad 3:Android手表 4:MacOS 5:iPad)
+    allowedGroups: []  # 允许的群组列表
+    allowedUsers: []   # 允许的用户列表
+    adminUsers: []     # 管理员用户列表
+    ownerUsers: []     # 主人用户列表
+    autoAcceptFriend: false      # 自动接受好友请求
+    autoAcceptGroupInvite: false # 自动接受群邀请
+    dataDir: "./data/qq"         # 数据目录
+    logLevel: "info"             # 日志级别
+  
+  telegram:
+    enabled: true
+    token: "7529395668:AAGa5-US-bQ0CnWBs4UO0TUeuKzgt3W426A"  # Bot Token
+    allowedUsers: [6812891612]  # 允许的用户ID列表
+    adminUsers: [6812891612]    # 管理员用户ID列表
+    ownerUsers: [6812891612]    # 主人用户ID列表
+    polling:
+      enabled: true   # 启用轮询模式
+      interval: 1000  # 轮询间隔(毫秒)
+    webhook:
+      url: ""         # Webhook URL
+      port: 3443      # Webhook端口
+
+  http:
+    enabled: false
+    port: 3000        # HTTP服务端口
+    host: "0.0.0.0"   # 监听地址
+    apiKey: ""        # API密钥（可选）
+    allowedIPs: []    # IP白名单（可选）
+    defaultPermission: "USER"  # 默认权限级别
+    userPermissions: {}        # 用户权限映射
+    cors:
+      enabled: true
+      origin: "*"
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+
+database:
+  type: sqlite
+  sqlite:
+    path: "./data/bot.db"
+  redis:
+    host: localhost
+    port: 6379
+    password: ""
+    db: 0
+
+plugins:
+  directory: "./plugins"
+  autoLoad: true
+  hotReload: true
+
+logging:
+  level: info
+  file: true
+  console: true
+
+# 权限配置
+permissions:
+  defaultLevel: 1  # 默认用户权限级别
+  adminUsers: []   # 管理员用户ID列表
+  ownerUsers: []   # 主人用户ID列表
+
+# 消息处理配置
+messageHandler:
+  maxRetries: 3
+  retryDelay: 1000
+  enableRateLimit: true
+  rateLimitWindow: 60000  # 1分钟
+  rateLimitMax: 30        # 每分钟最多30条消息
+
+# 异常处理配置
+errorHandler:
+  logErrors: true
+  preventCrash: true
+  maxErrorsPerMinute: 10

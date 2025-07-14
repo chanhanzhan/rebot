@@ -129,7 +129,7 @@ export class TelegramAdapter implements Adapter {
     }
 
     try {
-      // 如果target包含platform前缀，提取实际的chatId
+  
       let chatId = target;
       if (target.includes(':')) {
         chatId = target.split(':')[1] || target;

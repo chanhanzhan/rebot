@@ -141,8 +141,7 @@ export class ConsoleAdapter implements Adapter {
 
     Logger.debug(`[控制台适配器] 控制台输入: ${input}`);
     this.messageCallback(message);
-    
-    // 显示下一个提示符
+  
     this.promptUser();
   }
 

@@ -46,8 +46,7 @@ export abstract class BasePlugin implements Plugin {
    * 子类可以重写此方法来实现具体的消息发送逻辑
    */
   protected async sendMessage(message: Message, content: string): Promise<void> {
-    // 这里应该通过适配器发送消息
-    // 为了简化，现在只是记录日志
+
     Logger.info(`Plugin ${this.name} would send: ${content} to ${message.sender.name}`);
     console.log(`[${this.name} -> ${message.sender.name}]: ${content}`);
   }
@@ -63,6 +62,6 @@ export abstract class BasePlugin implements Plugin {
    * 解析消息参数的辅助方法
    */
   protected parseArgs(content: string): string[] {
-    return content.trim().split(/\s+/).slice(1); // 移除第一个词（命令）
+    return content.trim().split(/\s+/).slice(1); 
   }
 }

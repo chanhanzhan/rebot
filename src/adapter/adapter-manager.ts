@@ -91,11 +91,9 @@ export class AdapterManager {
 
   private handleMessage(message: Message): void {
     try {
-      Logger.info(`[适配器管理器] 收到消息: ${message.content} (来自: ${message.platform} - ${message.sender.name})`);
-      
-      // 触发消息事件，让插件处理（消息处理器内部会处理并发）
+ //     Logger.info(`[适配器管理器] 收到消息: ${message.content} (来自: ${message.platform} - ${message.sender.name})`);
       const emitted = this.eventBus.safeEmit('message', message);
-      Logger.debug(`[适配器管理器] 消息事件已发送, 是否有监听器: ${emitted}`);
+ //     Logger.debug(`[适配器管理器] 消息事件已发送, 是否有监听器: ${emitted}`);
       
     } catch (error) {
       Logger.error('[适配器管理器] 处理消息时出错:', error);
@@ -160,7 +158,6 @@ export class AdapterManager {
         Logger.info('控制台适配器未启用');
       }
 
-      // QQ适配器
       if (adaptersConfig.qq?.enabled) {
         Logger.info('正在自动加载QQ适配器...');
         try {
@@ -185,8 +182,6 @@ export class AdapterManager {
       } else {
         Logger.info('QQ适配器未启用');
       }
-
-      // Telegram适配器
       if (adaptersConfig.telegram?.enabled) {
         Logger.info('正在自动加载Telegram适配器...');
         try {
@@ -209,7 +204,6 @@ export class AdapterManager {
         Logger.info('Telegram适配器未启用');
       }
 
-      // HTTP API适配器
       if (adaptersConfig.http?.enabled) {
         Logger.info('正在自动加载HTTP API适配器...');
         try {

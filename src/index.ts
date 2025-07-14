@@ -3,8 +3,8 @@ import { Logger, LogLevel } from './config/log';
 
 async function main() {
   try {
-    // 设置日志级别为DEBUG以获取更多信息
-    Logger.setLogLevel(LogLevel.DEBUG);
+   
+    Logger.setLogLevel(LogLevel.INFO);
     
     Logger.info('正在初始化Bot框架...');
     
@@ -16,7 +16,7 @@ async function main() {
     
     // 显示状态
     const status = framework.getStatus();
-    Logger.info(`框架状态: 适配器 ${status.adapterCount} 个，插件 ${status.pluginCount} 个`);
+   // Logger.info(`框架状态: 适配器 ${status.adapterCount} 个，插件 ${status.pluginCount} 个`);
     
     Logger.info('Bot框架正在运行，请开始使用...');
     
