@@ -28,12 +28,12 @@ async function main() {
     
     // 启动框架（将自动加载适配器和插件）
     await framework.start();
- /*   
+    
     if (!botConfig?.plugins?.autoLoad) {
 
       try {
-        const ExamplePlugin = (await import('./plugins/example-plugin/index')).default;
-        const examplePlugin = new ExamplePlugin();
+    //    const ExamplePlugin = (await import('./plugins/example-plugin/index')).default;
+     //   const examplePlugin = new ExamplePlugin();
         await framework.loadPlugin(examplePlugin);
         Logger.info('示例插件加载成功');
         
@@ -46,7 +46,7 @@ async function main() {
         Logger.error('插件加载失败:', error);
       }
     }
-*/    
+   
     // 显示框架状态
     const status = framework.getStatus();
     Logger.info(`📊 框架状态: 运行=${status.isRunning}, 插件数=${status.pluginCount}, 适配器数=${status.adapterCount}`);

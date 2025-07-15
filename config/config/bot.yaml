@@ -6,7 +6,7 @@ debug: true
 adapters:
   console:
     enabled: true
-    username: "Console User"
+    username: "Console"
     permission: "OWNER"
     prompt: "[控制台] "
     enableHistory: true
@@ -22,8 +22,8 @@ adapters:
     allowedUsers: []   # 允许的用户列表
     adminUsers: []     # 管理员用户列表
     ownerUsers: []     # 主人用户列表
-    autoAcceptFriend: false      # 自动接受好友请求
-    autoAcceptGroupInvite: false # 自动接受群邀请
+    autoAcceptFriend: true      # 自动接受好友请求
+    autoAcceptGroupInvite: true # 自动接受群邀请
     dataDir: "./data/qq"         # 数据目录
     logLevel: "info"             # 日志级别
   
@@ -71,7 +71,7 @@ plugins:
 logging:
   level: info
   file: true
-  console: true
+  console: false
 
 # 权限配置
 permissions:
