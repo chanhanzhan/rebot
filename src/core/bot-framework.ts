@@ -133,7 +133,8 @@ export class BotFramework {
   }
 
   public async loadPlugin(plugin: Plugin): Promise<void> {
-    await this.pluginManager.loadPlugin(plugin);
+    // 这里假设 plugin 已经是 IPlugin 类型，如果不是，需类型断言或补全实现
+    await this.pluginManager.loadPlugin(plugin as any);
   }
 
   public async unloadPlugin(pluginName: string): Promise<void> {

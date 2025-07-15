@@ -77,6 +77,48 @@ export class ConsoleAdapter implements Adapter {
     return this.connected;
   }
 
+  // ====== 适配器通用/特有API补全 ======
+  public async getBotInfo(): Promise<any> {
+    return {
+      name: this.name,
+      username: this.config.username,
+      permission: this.config.permission,
+      platform: 'console',
+      status: this.connected ? 'online' : 'offline'
+    };
+  }
+  public getSessionList(): string[] {
+    return ['console_user'];
+  }
+  public async sendFile(target: string, filePath: string): Promise<void> {
+    throw new Error('sendFile not supported by console adapter');
+  }
+  public async getUserInfo(userId: string): Promise<any> {
+    if (userId === 'console_user') {
+      return {
+        id: 'console_user',
+        name: this.config.username,
+        permission: this.config.permission
+      };
+    }
+    return null;
+  }
+  public async broadcastMessage(content: string): Promise<void> {
+    await this.sendMessage('console_user', content);
+  }
+  public async getGroupList(): Promise<any[]> {
+    return [];
+  }
+  public async getFriendList(): Promise<any[]> {
+    return [{ id: 'console_user', name: this.config.username }];
+  }
+  public async kickUser(userId: string, groupId?: string): Promise<void> {
+    throw new Error('kickUser not supported by console adapter');
+  }
+  public async muteUser(userId: string, groupId?: string, duration?: number): Promise<void> {
+    throw new Error('muteUser not supported by console adapter');
+  }
+
   private setupReadline(): void {
     this.rl = readline.createInterface({
       input: process.stdin,

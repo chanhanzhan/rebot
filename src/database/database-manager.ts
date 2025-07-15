@@ -1,3 +1,5 @@
+import { RedisDatabase } from '../config/readis';
+
 export interface DatabaseInterface {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -53,6 +55,9 @@ export class DatabaseManager {
   }
 
   public setDatabase(database: DatabaseInterface): void {
+    if (!(database instanceof RedisDatabase)) {
+      throw new Error('框架已强制使用 Redis 作为唯一数据库后端');
+    }
     this.database = database;
   }
 
@@ -78,5 +83,9 @@ export class DatabaseManager {
 
   public async exists(key: string): Promise<boolean> {
     return await this.database.exists(key);
+  }
+
+  public getDatabase(): DatabaseInterface {
+    return this.database;
   }
 }

@@ -98,10 +98,22 @@ export class TelegramAdapter implements Adapter {
       }
       
       this.connected = true;
-      Logger.info(`Telegram Bot连接成功: @${this.botInfo.username}`);
+      Logger.info(`Telegram Bot连接成功: @${this.botInfo?.username}`);
       
     } catch (error) {
-      Logger.error('Telegram连接失败:', error);
+      let errMsg = '';
+      if (typeof error === 'string') {
+        errMsg = error;
+      } else if (error instanceof Error) {
+        errMsg = error.stack || error.message;
+      } else {
+        try {
+          errMsg = JSON.stringify(error);
+        } catch {
+          errMsg = String(error);
+        }
+      }
+      Logger.error('Telegram连接失败:', errMsg);
       throw error;
     }
   }
@@ -171,14 +183,35 @@ export class TelegramAdapter implements Adapter {
     return this.connected;
   }
 
-  private async getBotInfo(): Promise<void> {
-    try {
-      const response = await this.makeApiCall('getMe');
-      this.botInfo = response.result;
-      Logger.info(`Telegram Bot信息: ${this.botInfo.first_name} (@${this.botInfo.username})`);
-    } catch (error) {
-      throw new Error(`获取Bot信息失败: ${error}`);
-    }
+  // ====== 适配器通用/特有API补全 ======
+  public async getBotInfo(): Promise<any> {
+    return this.botInfo || { platform: 'telegram', status: this.connected ? 'online' : 'offline' };
+  }
+  public getSessionList(): string[] {
+    // 仅示例，实际应返回活跃会话id
+    return [];
+  }
+  public async sendFile(target: string, filePath: string): Promise<void> {
+    throw new Error('sendFile not implemented for TelegramAdapter');
+  }
+  public async getUserInfo(userId: string): Promise<any> {
+    // 仅示例，实际应通过API获取
+    return { id: userId, name: 'Telegram用户' + userId };
+  }
+  public async broadcastMessage(content: string): Promise<void> {
+    throw new Error('broadcastMessage not implemented for TelegramAdapter');
+  }
+  public async getGroupList(): Promise<any[]> {
+    return [];
+  }
+  public async getFriendList(): Promise<any[]> {
+    return [];
+  }
+  public async kickUser(userId: string, groupId?: string): Promise<void> {
+    throw new Error('kickUser not implemented for TelegramAdapter');
+  }
+  public async muteUser(userId: string, groupId?: string, duration?: number): Promise<void> {
+    throw new Error('muteUser not implemented for TelegramAdapter');
   }
 
   private async makeApiCall(method: string, params?: any): Promise<any> {
@@ -576,6 +609,58 @@ export class TelegramAdapter implements Adapter {
     });
   }
 
+  // 发送 Markdown 格式消息
+  public async sendMarkdownMessage(target: string, content: string, version: 'Markdown' | 'MarkdownV2' = 'Markdown'): Promise<void> {
+    await this.sendMessage(target, content, { parseMode: version });
+  }
+
+  // 发送图片
+  public async sendPhoto(chatId: string, photoUrlOrFile: string, caption?: string, options?: { parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2'; replyMarkup?: InlineKeyboard; }): Promise<void> {
+    if (!this.connected) throw new Error('Telegram adapter 未连接');
+    const params: any = {
+      chat_id: chatId,
+      photo: photoUrlOrFile,
+      caption: caption,
+      parse_mode: options?.parseMode || this.config.parseMode || 'HTML'
+    };
+    if (options?.replyMarkup) params.reply_markup = JSON.stringify(options.replyMarkup);
+    await this.makeApiCall('sendPhoto', params);
+  }
+
+  // 发送文件
+  public async sendDocument(chatId: string, fileUrlOrFile: string, caption?: string, options?: { parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2'; replyMarkup?: InlineKeyboard; }): Promise<void> {
+    if (!this.connected) throw new Error('Telegram adapter 未连接');
+    const params: any = {
+      chat_id: chatId,
+      document: fileUrlOrFile,
+      caption: caption,
+      parse_mode: options?.parseMode || this.config.parseMode || 'HTML'
+    };
+    if (options?.replyMarkup) params.reply_markup = JSON.stringify(options.replyMarkup);
+    await this.makeApiCall('sendDocument', params);
+  }
+
+  // 获取聊天全部上下文（历史消息）
+  public async getChatHistory(chatId: string, limit: number = 50): Promise<any[]> {
+    // Telegram Bot API 不直接支持获取历史消息，需通过用户端API或数据库缓存实现
+    throw new Error('getChatHistory 需通过外部服务或缓存实现，Telegram Bot API 不支持');
+  }
+
+  // 解封用户（unban）
+  public async unbanUser(chatId: string, userId: string): Promise<void> {
+    await this.makeApiCall('unbanChatMember', { chat_id: chatId, user_id: userId });
+  }
+
+  // 解口（unmute/unrestrict）
+  public async unmuteUser(chatId: string, userId: string): Promise<void> {
+    await this.makeApiCall('restrictChatMember', { chat_id: chatId, user_id: userId, permissions: { can_send_messages: true, can_send_media_messages: true, can_send_polls: true, can_send_other_messages: true, can_add_web_page_previews: true, can_change_info: true, can_invite_users: true, can_pin_messages: true } });
+  }
+
+  // 撤回消息（deleteMessage 已有，提供 revokeMessage 别名）
+  public async revokeMessage(chatId: string, messageId: number): Promise<void> {
+    await this.deleteMessage(chatId, messageId);
+  }
+
   // 编辑消息
   public async editMessage(chatId: string, messageId: number, text: string, options?: {
     parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2';
@@ -623,6 +708,77 @@ export class TelegramAdapter implements Adapter {
       Logger.error(`删除Telegram消息失败:`, error);
       throw error;
     }
+  }
+
+  // ====== 群管理相关 ======
+  // 获取群成员列表
+  public async getChatMembers(chatId: string): Promise<any[]> {
+    const res = await this.makeApiCall('getChatAdministrators', { chat_id: chatId });
+    return res.result || [];
+  }
+  // 踢出群成员
+  public async kickUserFromGroup(chatId: string, userId: string): Promise<void> {
+    await this.makeApiCall('kickChatMember', { chat_id: chatId, user_id: userId });
+  }
+  // 邀请用户入群（仅支持公开群）
+  public async inviteUserToGroup(chatId: string, userId: string): Promise<void> {
+    // Telegram Bot API 不支持直接邀请用户入群
+    throw new Error('inviteUserToGroup 需用户自行加入，Bot API 不支持');
+  }
+  // 设置群头衔
+  public async setGroupTitle(chatId: string, title: string): Promise<void> {
+    await this.makeApiCall('setChatTitle', { chat_id: chatId, title });
+  }
+  // 设置群公告
+  public async setGroupDescription(chatId: string, description: string): Promise<void> {
+    await this.makeApiCall('setChatDescription', { chat_id: chatId, description });
+  }
+
+  // ====== 更多媒体类型 ======
+  public async sendAudio(chatId: string, audioUrlOrFile: string, options?: any): Promise<void> {
+    await this.makeApiCall('sendAudio', { chat_id: chatId, audio: audioUrlOrFile, ...options });
+  }
+  public async sendVideo(chatId: string, videoUrlOrFile: string, options?: any): Promise<void> {
+    await this.makeApiCall('sendVideo', { chat_id: chatId, video: videoUrlOrFile, ...options });
+  }
+  public async sendVoice(chatId: string, voiceUrlOrFile: string, options?: any): Promise<void> {
+    await this.makeApiCall('sendVoice', { chat_id: chatId, voice: voiceUrlOrFile, ...options });
+  }
+  public async sendSticker(chatId: string, stickerUrlOrFile: string, options?: any): Promise<void> {
+    await this.makeApiCall('sendSticker', { chat_id: chatId, sticker: stickerUrlOrFile, ...options });
+  }
+
+  // ====== 上下文缓存（需外部实现，预留接口） ======
+  private contextCache: Map<string, any[]> = new Map();
+  public cacheMessageContext(chatId: string, message: any): void {
+    if (!this.contextCache.has(chatId)) this.contextCache.set(chatId, []);
+    this.contextCache.get(chatId)!.push(message);
+    if (this.contextCache.get(chatId)!.length > 100) this.contextCache.get(chatId)!.shift();
+  }
+  public getCachedContext(chatId: string, limit: number = 20): any[] {
+    return (this.contextCache.get(chatId) || []).slice(-limit);
+  }
+
+  // ====== 批量操作 ======
+  public async batchDeleteMessages(chatId: string, messageIds: number[]): Promise<void> {
+    for (const id of messageIds) {
+      try { await this.deleteMessage(chatId, id); } catch {}
+    }
+  }
+  public async batchSendMessages(chatId: string, messages: { text: string, options?: any }[]): Promise<void> {
+    for (const msg of messages) {
+      await this.sendMessage(chatId, msg.text, msg.options);
+    }
+  }
+
+  // ====== 定时撤回 ======
+  public async scheduleRevokeMessage(chatId: string, messageId: number, delayMs: number): Promise<void> {
+    setTimeout(() => { this.deleteMessage(chatId, messageId); }, delayMs);
+  }
+
+  // ====== 消息引用 ======
+  public async sendReplyMessage(chatId: string, text: string, replyToMessageId: number, options?: any): Promise<void> {
+    await this.sendMessage(chatId, text, { ...options, reply_to_message_id: replyToMessageId });
   }
 }
 

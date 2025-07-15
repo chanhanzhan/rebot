@@ -89,6 +89,69 @@ export class AdapterManager {
     await adapter.sendMessage(target, content);
   }
 
+  public getOnlineStatus(adapterName: string): boolean {
+    const adapter = this.adapters.get(adapterName);
+    return adapter ? adapter.isConnected() : false;
+  }
+
+  public getSessionList(adapterName: string): string[] {
+    // 示例：返回所有 target id（需适配器实现）
+    const adapter = this.adapters.get(adapterName);
+    if (adapter && typeof (adapter as any).getSessionList === 'function') {
+      return (adapter as any).getSessionList();
+    }
+    return [];
+  }
+
+  public async sendFile(adapterName: string, target: string, filePath: string): Promise<void> {
+    const adapter = this.adapters.get(adapterName);
+    if (adapter && typeof (adapter as any).sendFile === 'function') {
+      await (adapter as any).sendFile(target, filePath);
+    } else {
+      throw new Error('sendFile not supported by adapter: ' + adapterName);
+    }
+  }
+
+  public async getUserInfo(adapterName: string, userId: string): Promise<any> {
+    const adapter = this.adapters.get(adapterName);
+    if (adapter && typeof (adapter as any).getUserInfo === 'function') {
+      return await (adapter as any).getUserInfo(userId);
+    }
+    return null;
+  }
+
+  public async broadcastMessage(adapterName: string, content: string): Promise<void> {
+    const adapter = this.adapters.get(adapterName);
+    if (adapter && typeof (adapter as any).broadcastMessage === 'function') {
+      await (adapter as any).broadcastMessage(content);
+    } else {
+      throw new Error('broadcastMessage not supported by adapter: ' + adapterName);
+    }
+  }
+
+  // 新增：统一消息删除接口
+  public async deleteMessage(adapterName: string, chatId: string, messageId: number): Promise<void> {
+    const adapter = this.adapters.get(adapterName);
+    if (adapter && typeof (adapter as any).deleteMessage === 'function') {
+      await (adapter as any).deleteMessage(chatId, messageId);
+    } else {
+      throw new Error('deleteMessage not supported by adapter: ' + adapterName);
+    }
+  }
+  // 新增：统一消息编辑接口
+  public async editMessage(adapterName: string, chatId: string, messageId: number, text: string, options?: any): Promise<void> {
+    const adapter = this.adapters.get(adapterName);
+    if (adapter && typeof (adapter as any).editMessage === 'function') {
+      await (adapter as any).editMessage(chatId, messageId, text, options);
+    } else {
+      throw new Error('editMessage not supported by adapter: ' + adapterName);
+    }
+  }
+  // 新增：撤回消息（别名）
+  public async revokeMessage(adapterName: string, chatId: string, messageId: number): Promise<void> {
+    await this.deleteMessage(adapterName, chatId, messageId);
+  }
+
   private handleMessage(message: Message): void {
     try {
  //     Logger.info(`[适配器管理器] 收到消息: ${message.content} (来自: ${message.platform} - ${message.sender.name})`);
@@ -140,7 +203,7 @@ export class AdapterManager {
         return;
       }
 
-      Logger.info('适配器配置:', JSON.stringify(adaptersConfig, null, 2));
+    //  Logger.info('适配器配置:', JSON.stringify(adaptersConfig, null, 2));
 
       // 控制台适配器
       if (adaptersConfig.console?.enabled) {

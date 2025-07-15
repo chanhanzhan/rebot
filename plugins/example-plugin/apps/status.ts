@@ -240,4 +240,25 @@ export class StatusApp {
       uptime: process.uptime()
     };
   }
+
+  // Redis 缓存示例
+  public async setCache(key: string, value: string) {
+    await this.plugin.pluginManager.setRedisCache(`status:${key}`, value);
+  }
+  public async getCache(key: string) {
+    return await this.plugin.pluginManager.getRedisCache(`status:${key}`);
+  }
+  // 上下文缓存
+  public cacheContext(chatId: string, message: any) {
+    if (!this.plugin.contextCache) this.plugin.contextCache = new Map();
+    if (!this.plugin.contextCache.has(chatId)) this.plugin.contextCache.set(chatId, []);
+    this.plugin.contextCache.get(chatId)!.push(message);
+    if (this.plugin.contextCache.get(chatId)!.length > 100) this.plugin.contextCache.get(chatId)!.shift();
+    this.setCache(`context:${chatId}`, JSON.stringify(this.plugin.contextCache.get(chatId)));
+  }
+  public async getCachedContext(chatId: string, limit: number = 20) {
+    const redisVal = await this.getCache(`context:${chatId}`);
+    if (redisVal) return JSON.parse(redisVal).slice(-limit);
+    return (this.plugin.contextCache.get(chatId) || []).slice(-limit);
+  }
 }

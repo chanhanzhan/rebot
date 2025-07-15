@@ -384,6 +384,41 @@ export class QQAdapter implements Adapter {
       }
     };
   }
+
+  // ====== 适配器通用/特有API补全 ======
+  public async getBotInfo(): Promise<any> {
+    return {
+      uin: this.config.uin,
+      platform: 'qq',
+      status: this.connected ? 'online' : 'offline'
+    };
+  }
+  public getSessionList(): string[] {
+    // 模拟返回所有群和好友id
+    return ['private:' + this.config.uin];
+  }
+  public async sendFile(target: string, filePath: string): Promise<void> {
+    throw new Error('sendFile not implemented for QQAdapter');
+  }
+  public async getUserInfo(userId: string): Promise<any> {
+    // 模拟返回用户信息
+    return { id: userId, name: 'QQ用户' + userId };
+  }
+  public async broadcastMessage(content: string): Promise<void> {
+    throw new Error('broadcastMessage not implemented for QQAdapter');
+  }
+  public async getGroupList(): Promise<any[]> {
+    return [];
+  }
+  public async getFriendList(): Promise<any[]> {
+    return [];
+  }
+  public async kickUser(userId: string, groupId?: string): Promise<void> {
+    throw new Error('kickUser not implemented for QQAdapter');
+  }
+  public async muteUser(userId: string, groupId?: string, duration?: number): Promise<void> {
+    throw new Error('muteUser not implemented for QQAdapter');
+  }
 }
 
 // 默认导出

@@ -28,6 +28,18 @@ export interface Adapter {
   sendMessage(target: string, content: string): Promise<void>;
   onMessage(callback: (message: Message) => void): void;
   isConnected(): boolean;
+  // 通用API
+  getSessionList?(): string[];
+  sendFile?(target: string, filePath: string): Promise<void>;
+  getUserInfo?(userId: string): Promise<any>;
+  broadcastMessage?(content: string): Promise<void>;
+  // 群聊/好友相关
+  getGroupList?(): Promise<any[]>;
+  getFriendList?(): Promise<any[]>;
+  kickUser?(groupId: string, userId: string): Promise<void>;
+  muteUser?(groupId: string, userId: string, duration: number): Promise<void>;
+  getBotInfo?(): Promise<any>;
+  // 适配器自定义API可扩展
 }
 
 // 插件函数注册信息
@@ -35,8 +47,9 @@ export interface PluginFunction {
   name: string;
   description: string;
   permission: PermissionLevel;
+  triggers: string[];
+  adapters?: string[]; // 支持的适配器平台，如 ['qq', 'telegram']，不填为全部
   handler: (message: Message, args: string[]) => Promise<void>;
-  triggers: string[]; // 触发关键词
 }
 
 // 插件接口
