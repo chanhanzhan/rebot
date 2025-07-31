@@ -32,10 +32,11 @@ async function main() {
         }
       }
       if (!connected) {
-        Logger.error('无法连接到 Redis，程序即将退出');
-        process.exit(1);
+        Logger.warn('无法连接到 Redis，将在没有数据库的情况下继续运行');
+        redisDb = null;
+      } else {
+        DatabaseManager.getInstance().setDatabase(redisDb);
       }
-      DatabaseManager.getInstance().setDatabase(redisDb);
     }
     // 获取框架实例
     const framework = BotFramework.getInstance();

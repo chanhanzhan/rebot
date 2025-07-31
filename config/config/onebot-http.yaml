@@ -1,0 +1,57 @@
+# OneBot v11 HTTP适配器配置
+onebot_http:
+  # HTTP服务配置
+  http:
+    enabled: true
+    host: "127.0.0.1"
+    port: 5700
+    timeout: 0
+    post_timeout: 0
+
+  # 正向WebSocket配置
+  ws:
+    enabled: false
+    host: "127.0.0.1"
+    port: 6700
+
+  # 反向WebSocket配置
+  ws_reverse:
+    enabled: false
+    universal: ""  # 通用WebSocket地址
+    api: ""        # API WebSocket地址
+    event: ""      # 事件WebSocket地址
+    reconnect_interval: 3000
+
+  # 认证配置
+  access_token: ""  # 访问令牌，留空则不验证
+  secret: ""        # 签名密钥，留空则不验证
+
+  # 插件HTTP服务注册
+  plugin_routes:
+    enabled: true
+    base_path: "/plugins"  # 插件路由基础路径
+
+  # 其他配置
+  post_message_format: "string"  # 消息格式：string 或 array
+  enable_cors: true              # 启用CORS
+  cors_origin: "*"               # CORS允许的源，可以是字符串或数组
+
+# 示例配置
+  onebot_http:
+   http:
+     enabled: true
+     host: "0.0.0.0"
+     port: 5700
+   ws:
+     enabled: true
+     host: "0.0.0.0"
+     port: 6700
+   ws_reverse:
+     enabled: true
+     universal: "ws://localhost:8080/onebot/v11/ws"
+     api: "ws://localhost:8080/onebot/v11/ws/api"
+     event: "ws://localhost:8080/onebot/v11/ws/event"
+   access_token: ""
+   plugin_routes:
+     enabled: true
+     base_path: "/plugins"

@@ -26,6 +26,10 @@ export class ConfigInitializer {
     const defaultDir = path.resolve(process.cwd(), 'config/default_config');
     const configDir = path.resolve(process.cwd(), 'config/config');
     if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+    if (!fs.existsSync(defaultDir)) {
+      Logger.warn(`Default config directory not found: ${defaultDir}`);
+      return;
+    }
     for (const file of fs.readdirSync(defaultDir)) {
       const target = path.join(configDir, file);
       if (!fs.existsSync(target)) {

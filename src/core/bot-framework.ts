@@ -67,23 +67,21 @@ export class BotFramework {
       await this.databaseManager.connect();
       Logger.info('数据库已连接');
       
-      // 加载插件
-      const config = this.configManager.getConfig();
-      if (config.plugins && config.plugins.autoLoad) {
-        await this.loadPluginsFromDirectory(config.plugins.directory);
-      }
-      
       // 从配置初始化器获取配置并自动加载适配器
       const { ConfigInitializer } = await import('../config/init');
       const configInit = ConfigInitializer.getInstance();
       const botConfig = configInit.getConfig('bot');
       
-    //  Logger.info('框架启动时获取的bot配置:', JSON.stringify(botConfig, null, 2));
-      
       if (botConfig) {
         await this.adapterManager.loadAdaptersFromConfig(botConfig);
       } else {
         Logger.warn('未找到bot配置，跳过适配器自动加载');
+      }
+      
+      // 加载插件（在适配器加载完成后）
+      const config = this.configManager.getConfig();
+      if (config.plugins && config.plugins.autoLoad) {
+        await this.loadPluginsFromDirectory(config.plugins.directory);
       }
       
       this.isRunning = true;

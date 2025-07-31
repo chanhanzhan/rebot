@@ -1,13 +1,17 @@
 
-  import { Plugin, PluginFunction as _PluginFunction, Message, PermissionLevel } from '../common/types';
-export type PluginFunction = _PluginFunction;
-import { Logger } from '../config/log';
 import { BotFramework } from '../core/bot-framework';
 import { AdapterManager } from '../adapter/adapter-manager';
-import { PluginManager } from './plugin-manager';
 import { ConfigManager } from '../config/config';
 import { DatabaseManager } from '../database/database-manager';
 import { FrameworkEventBus } from '../common/event-bus';
+import { Logger } from '../config/log';
+import { Message, PermissionLevel, Plugin } from '../common/types';
+import { PluginManager, PluginHttpService } from './plugin-manager';
+import { OneBotHTTPAdapter, PluginHttpRoute } from '../adapter/onebot-http-adapter';
+import { PluginFunction } from '../common/types';
+import * as http from 'http';
+import * as path from 'path';
+import * as fs from 'fs';
 
 /**
  * 插件接口，所有插件需实现
@@ -164,5 +168,84 @@ export abstract class BasePlugin implements IPlugin {
     } else {
       throw new Error('editMessage not supported by adapterManager');
     }
+  }
+
+  /**
+   * 注册HTTP路由到OneBot适配器
+   */
+  protected registerHttpRoute(path: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'ALL', 
+    handler: (req: http.IncomingMessage, res: http.ServerResponse, body?: any) => Promise<void>,
+    middleware?: Array<(req: http.IncomingMessage, res: http.ServerResponse, next: () => void) => void>): void {
+    
+    this.pluginManager.registerPluginHttpRoute(this.name, {
+      path,
+      method,
+      handler,
+      middleware
+    });
+  }
+
+  /**
+   * 批量注册HTTP路由到OneBot适配器
+   */
+  protected registerHttpRoutes(routes: Array<{
+    path: string;
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'ALL';
+    handler: (req: http.IncomingMessage, res: http.ServerResponse, body?: any) => Promise<void>;
+    middleware?: Array<(req: http.IncomingMessage, res: http.ServerResponse, next: () => void) => void>;
+  }>): void {
+    this.pluginManager.registerPluginHttpRoutes(this.name, routes);
+  }
+
+  /**
+   * 申请插件专用的HTTP目录
+   * 插件可以在 /plugins/{pluginName}/ 下注册任意路由
+   */
+  protected requestHttpDirectory(options?: {
+    middleware?: Array<(req: http.IncomingMessage, res: http.ServerResponse, next: () => void) => void>;
+    cors?: boolean;
+    rateLimit?: { windowMs: number; max: number };
+  }): string {
+    return this.pluginManager.requestPluginHttpDirectory(this.name, options);
+  }
+
+  /**
+   * 获取插件的HTTP目录路径
+   */
+  protected getHttpDirectory(): string | undefined {
+    return this.pluginManager.getPluginHttpDirectory(this.name);
+  }
+
+  /**
+   * 注销HTTP路由
+   */
+  protected unregisterHttpRoute(path: string, method: string): void {
+    this.pluginManager.unregisterPluginHttpRoute(this.name, method, path);
+  }
+
+  /**
+   * 启动独立的HTTP服务器
+   */
+  protected async startHttpServer(port: number, routes: Omit<PluginHttpRoute, 'pluginName'>[]): Promise<void> {
+    const fullRoutes: PluginHttpRoute[] = routes.map(route => ({
+      ...route,
+      pluginName: this.name
+    }));
+
+    await this.pluginManager.startPluginHttpServer(this.name, port, fullRoutes);
+  }
+
+  /**
+   * 停止独立的HTTP服务器
+   */
+  protected async stopHttpServer(): Promise<void> {
+    await this.pluginManager.stopPluginHttpServer(this.name);
+  }
+
+  /**
+   * 获取插件的HTTP服务信息
+   */
+  protected getHttpServiceInfo() {
+    return this.pluginManager.getPluginHttpService(this.name);
   }
 }

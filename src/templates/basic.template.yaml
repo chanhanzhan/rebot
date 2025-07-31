@@ -1,0 +1,39 @@
+name: basic
+description: 基础机器人配置模板
+version: 1.0.0
+createdAt: "2024-01-01T00:00:00.000Z"
+author: system
+config:
+  name: "基础机器人"
+  version: "1.0.0"
+  environment: development
+  adapters:
+    console:
+      enabled: true
+  database:
+    type: sqlite
+    sqlite:
+      path: "./data/bot.db"
+  plugins:
+    directory: "./plugins"
+    autoLoad: true
+    hotReload: true
+  logging:
+    level: info
+    console:
+      enabled: true
+      colorize: true
+  security:
+    encryption:
+      enabled: false
+    rateLimit:
+      enabled: false
+    cors:
+      enabled: false
+  performance:
+    maxConcurrentTasks: 10
+    taskTimeout: 30000
+    memoryLimit: "512MB"
+    cpuLimit: 80
+  monitoring:
+    enabled: false

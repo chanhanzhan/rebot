@@ -29,7 +29,7 @@ export class SystemInfoApp {
       Logger.info(`System info command executed by ${message.sender.name}`);
       
       const systemInfo = await this.getDetailedSystemInfo();
-      const messageStats = MessageHandler.getInstance().getProcessingStats();
+      const messageStats = MessageHandler.getInstance().getDetailedStats();
       
       let response = '🖥️ 系统信息\n';
       response += '═══════════════════\n\n';
@@ -53,9 +53,9 @@ export class SystemInfoApp {
       response += `└─ External: ${systemInfo.memory.external}\n\n`;
       
       response += '📨 消息处理:\n';
-      response += `├─ 正在处理: ${messageStats.processing} 条\n`;
-      response += `├─ 最大并发: ${messageStats.maxConcurrent} 条\n`;
-      response += `└─ 处理能力: ${messageStats.processing < messageStats.maxConcurrent ? '正常' : '接近上限'}\n\n`;
+      response += `├─ 正在处理: ${messageStats.queue.processing} 条\n`;
+      response += `├─ 最大并发: ${messageStats.queue.maxConcurrent} 条\n`;
+      response += `└─ 处理能力: ${messageStats.queue.processing < messageStats.queue.maxConcurrent ? '正常' : '接近上限'}\n\n`;
       
       response += '🌐 网络信息:\n';
       response += `└─ 主机名: ${systemInfo.hostname}`;

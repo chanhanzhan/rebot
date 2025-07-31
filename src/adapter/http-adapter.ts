@@ -2,6 +2,7 @@ import { Adapter, Message, PermissionLevel } from '../common/types';
 import { Logger } from '../config/log';
 import * as http from 'http';
 import * as url from 'url';
+import { OneBotHTTPAdapter, OneBotConfig } from './onebot-http-adapter';
 
 export interface HTTPConfig {
   port: number;
@@ -21,6 +22,9 @@ export interface HTTPConfig {
     origin?: string | string[];
     methods?: string[];
   };
+  
+  // OneBot集成配置
+  onebot?: Partial<OneBotConfig> & { enabled: boolean };
 }
 
 interface APIRequest {
@@ -37,6 +41,7 @@ export class HTTPAdapter implements Adapter {
   private connected = false;
   private messageCallback?: (message: Message) => void;
   private server?: http.Server;
+  private onebotAdapter?: OneBotHTTPAdapter;
 
   constructor(config: HTTPConfig) {
     this.config = {
@@ -49,6 +54,42 @@ export class HTTPAdapter implements Adapter {
       },
       ...config
     };
+    
+    // 初始化OneBot适配器（如果启用）
+    if (this.config.onebot?.enabled) {
+      const onebotConfig: OneBotConfig = {
+        http: {
+          enabled: false, // 禁用独立HTTP服务器，使用共享端口
+          host: this.config.onebot.http?.host || '127.0.0.1',
+          port: this.config.onebot.http?.port || 5700,
+          timeout: this.config.onebot.http?.timeout || 0,
+          post_timeout: this.config.onebot.http?.post_timeout || 0
+        },
+        ws: {
+          enabled: this.config.onebot.ws?.enabled || false,
+          host: this.config.onebot.ws?.host || '127.0.0.1',
+          port: this.config.onebot.ws?.port || 6700
+        },
+        ws_reverse: {
+          enabled: this.config.onebot.ws_reverse?.enabled || false,
+          universal: this.config.onebot.ws_reverse?.universal || '',
+          api: this.config.onebot.ws_reverse?.api || '',
+          event: this.config.onebot.ws_reverse?.event || '',
+          reconnect_interval: this.config.onebot.ws_reverse?.reconnect_interval || 3000
+        },
+        plugin_routes: {
+          enabled: this.config.onebot.plugin_routes?.enabled !== undefined ? this.config.onebot.plugin_routes.enabled : true,
+          base_path: this.config.onebot.plugin_routes?.base_path || '/plugins'
+        },
+        post_message_format: this.config.onebot.post_message_format || 'string',
+        enable_cors: this.config.onebot.enable_cors !== undefined ? this.config.onebot.enable_cors : true,
+        cors_origin: this.config.onebot.cors_origin || '*',
+        access_token: this.config.onebot.access_token,
+        secret: this.config.onebot.secret
+      };
+      
+      this.onebotAdapter = new OneBotHTTPAdapter(onebotConfig);
+    }
   }
 
   public async connect(): Promise<void> {
@@ -69,6 +110,11 @@ export class HTTPAdapter implements Adapter {
         });
       });
       
+      // 启动OneBot适配器（如果启用）
+      if (this.onebotAdapter) {
+        await this.onebotAdapter.connect();
+      }
+      
       this.connected = true;
       Logger.info(`HTTP API服务器已启动: http://${this.config.host}:${this.config.port}`);
       
@@ -80,6 +126,11 @@ export class HTTPAdapter implements Adapter {
 
   public async disconnect(): Promise<void> {
     Logger.info('正在关闭HTTP API服务器...');
+    
+    // 关闭OneBot适配器
+    if (this.onebotAdapter) {
+      await this.onebotAdapter.disconnect();
+    }
     
     if (this.server) {
       await new Promise<void>((resolve) => {
@@ -155,13 +206,19 @@ export class HTTPAdapter implements Adapter {
       Logger.info(`HTTP请求: ${req.method} ${req.url} - 200 (${duration}ms)`);
       
     } catch (error) {
-      Logger.error('HTTP请求处理错误:', error);
+      Logger.error('HTTP请求处理错误:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        url: req.url,
+        method: req.method,
+        headers: req.headers
+      });
       this.sendError(res, 500, '服务器内部错误');
     }
   }
 
   private async parseRequest(req: http.IncomingMessage): Promise<APIRequest> {
-    const parsedUrl = url.parse(req.url || '', true);
+    const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     
     return new Promise((resolve, reject) => {
       let body = '';
@@ -176,7 +233,7 @@ export class HTTPAdapter implements Adapter {
             method: req.method || 'GET',
             url: parsedUrl.pathname || '/',
             headers: req.headers as { [key: string]: string },
-            body: body ? JSON.parse(body) : parsedUrl.query,
+            body: body ? JSON.parse(body) : Object.fromEntries(parsedUrl.searchParams),
             ip: req.socket.remoteAddress || 'unknown'
           };
           resolve(request);
@@ -192,7 +249,28 @@ export class HTTPAdapter implements Adapter {
   private async routeRequest(request: APIRequest): Promise<any> {
     const { method, url: path, body } = request;
     
+    // 处理OneBot路由
+    if (path.startsWith('/onebot') && this.onebotAdapter) {
+      return this.handleOneBotRequest(request);
+    }
+    
     switch (path) {
+      case '/':
+        // 根路径返回API文档或状态页面
+        return {
+          name: 'Bot Framework HTTP API',
+          version: '1.0.0',
+          status: 'running',
+          endpoints: {
+            '/api/send': 'POST - 发送消息',
+            '/api/status': 'GET - 获取状态',
+            '/api/webhook': 'POST - Webhook接收',
+            '/health': 'GET - 健康检查',
+            ...(this.onebotAdapter ? { '/onebot/*': 'OneBot协议API' } : {})
+          },
+          timestamp: Date.now()
+        };
+        
       case '/api/send':
         return this.handleSendMessage(request);
         
@@ -205,7 +283,15 @@ export class HTTPAdapter implements Adapter {
       case '/health':
         return { status: 'ok', timestamp: Date.now() };
         
+      case '/favicon.ico':
+        // 返回一个简单的响应，避免404错误
+        return { status: 'not found', message: 'favicon not available' };
+        
       default:
+        // 检查是否是Vite开发服务器相关请求
+        if (path.startsWith('/@vite/') || path.startsWith('/node_modules/')) {
+          return { status: 'not found', message: 'Development resource not available' };
+        }
         throw new Error(`未找到路径: ${path}`);
     }
   }
@@ -337,6 +423,44 @@ export class HTTPAdapter implements Adapter {
       message: message,
       timestamp: Date.now()
     }));
+  }
+
+  // 处理OneBot请求
+  private async handleOneBotRequest(request: APIRequest): Promise<any> {
+    if (!this.onebotAdapter) {
+      throw new Error('OneBot适配器未启用');
+    }
+
+    // 移除/onebot前缀
+    const onebotPath = request.url.replace('/onebot', '') || '/';
+    
+    // 创建模拟的HTTP请求和响应对象
+    const mockReq = {
+      method: request.method,
+      url: onebotPath,
+      headers: request.headers,
+      socket: { remoteAddress: request.ip }
+    } as http.IncomingMessage;
+
+    const mockRes = {
+      writeHead: () => {},
+      end: (data: string) => data,
+      setHeader: () => {}
+    } as unknown as http.ServerResponse;
+
+    // 调用OneBot适配器的HTTP处理方法
+    try {
+      // 这里需要访问OneBot适配器的私有方法，我们需要修改OneBotHTTPAdapter
+      // 暂时返回一个简单的响应
+      return {
+        status: 'ok',
+        message: 'OneBot API endpoint',
+        path: onebotPath,
+        method: request.method
+      };
+    } catch (error) {
+      throw new Error(`OneBot请求处理失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   // 获取服务器统计信息

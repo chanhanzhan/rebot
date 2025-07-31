@@ -185,33 +185,247 @@ export class TelegramAdapter implements Adapter {
 
   // ====== 适配器通用/特有API补全 ======
   public async getBotInfo(): Promise<any> {
-    return this.botInfo || { platform: 'telegram', status: this.connected ? 'online' : 'offline' };
+    if (this.botInfo) {
+      return this.botInfo;
+    }
+    
+    try {
+      Logger.debug('正在获取Telegram Bot信息...');
+      const response = await this.makeApiCall('getMe');
+      this.botInfo = response.result;
+      Logger.info(`获取到Bot信息: @${this.botInfo.username} (${this.botInfo.first_name})`);
+      return this.botInfo;
+    } catch (error) {
+      Logger.error('获取Bot信息失败:', error);
+      throw new Error(`无法获取Bot信息: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
   public getSessionList(): string[] {
     // 仅示例，实际应返回活跃会话id
     return [];
   }
   public async sendFile(target: string, filePath: string): Promise<void> {
-    throw new Error('sendFile not implemented for TelegramAdapter');
+    if (!this.connected) {
+      throw new Error('Telegram adapter 未连接');
+    }
+
+    try {
+      let chatId = target;
+      if (target.includes(':')) {
+        chatId = target.split(':')[1] || target;
+      }
+
+      // 根据文件扩展名判断文件类型
+      const extension = filePath.toLowerCase().split('.').pop();
+      const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+      const videoExtensions = ['mp4', 'avi', 'mov', 'mkv'];
+      const audioExtensions = ['mp3', 'wav', 'ogg', 'flac'];
+
+      if (imageExtensions.includes(extension || '')) {
+        await this.sendPhoto(chatId, filePath);
+      } else if (videoExtensions.includes(extension || '')) {
+        await this.sendVideo(chatId, filePath);
+      } else if (audioExtensions.includes(extension || '')) {
+        await this.sendAudio(chatId, filePath);
+      } else {
+        await this.sendDocument(chatId, filePath);
+      }
+
+      Logger.debug(`Telegram文件已发送到 ${chatId}: ${filePath}`);
+    } catch (error) {
+      Logger.error(`发送Telegram文件失败:`, error);
+      throw error;
+    }
   }
   public async getUserInfo(userId: string): Promise<any> {
-    // 仅示例，实际应通过API获取
-    return { id: userId, name: 'Telegram用户' + userId };
+    if (!this.connected) {
+      throw new Error('Telegram adapter 未连接');
+    }
+
+    try {
+      // 尝试通过getChatMember获取用户信息
+      // 注意：这需要用户在某个群组中，或者是私聊
+      const response = await this.makeApiCall('getChat', { chat_id: userId });
+      return {
+        id: userId,
+        name: `${response.result.first_name || ''} ${response.result.last_name || ''}`.trim(),
+        username: response.result.username,
+        type: response.result.type,
+        bio: response.result.bio,
+        description: response.result.description
+      };
+    } catch (error) {
+      Logger.warn(`无法获取用户 ${userId} 的详细信息:`, error);
+      // 返回基本信息
+      return { 
+        id: userId, 
+        name: `Telegram用户${userId}`,
+        username: null,
+        type: 'private'
+      };
+    }
   }
   public async broadcastMessage(content: string): Promise<void> {
-    throw new Error('broadcastMessage not implemented for TelegramAdapter');
+    if (!this.connected) {
+      throw new Error('Telegram adapter 未连接');
+    }
+
+    // 获取所有允许的用户和管理员
+    const allUsers = new Set<string>();
+    
+    // 添加允许的用户
+    if (this.config.allowedUsers) {
+      this.config.allowedUsers.forEach(user => allUsers.add(user.toString()));
+    }
+    
+    // 添加管理员
+    if (this.config.adminUsers) {
+      this.config.adminUsers.forEach(user => allUsers.add(user.toString()));
+    }
+    
+    // 添加主人
+    if (this.config.ownerUsers) {
+      this.config.ownerUsers.forEach(user => allUsers.add(user.toString()));
+    }
+
+    if (allUsers.size === 0) {
+      Logger.warn('没有配置任何用户，无法广播消息');
+      return;
+    }
+
+    Logger.info(`开始向 ${allUsers.size} 个用户广播消息`);
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (const userId of allUsers) {
+      try {
+        await this.sendMessage(userId, content);
+        successCount++;
+        Logger.debug(`广播消息成功发送给用户: ${userId}`);
+      } catch (error) {
+        failCount++;
+        Logger.error(`广播消息发送失败，用户: ${userId}`, error);
+      }
+      
+      // 避免发送过快被限制
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    Logger.info(`广播消息完成: 成功 ${successCount} 个，失败 ${failCount} 个`);
   }
   public async getGroupList(): Promise<any[]> {
+    // Telegram Bot API 不支持直接获取群组列表
+    // 只能通过消息历史或缓存来维护群组列表
+    Logger.warn('Telegram Bot API 不支持获取群组列表，返回空数组');
     return [];
   }
+  
   public async getFriendList(): Promise<any[]> {
-    return [];
+    // Telegram Bot API 不支持获取好友列表概念
+    // 返回配置的用户列表作为替代
+    const friendList: any[] = [];
+    
+    if (this.config.allowedUsers) {
+      for (const userId of this.config.allowedUsers) {
+        try {
+          const userInfo = await this.getUserInfo(userId.toString());
+          friendList.push({
+            ...userInfo,
+            permission: 'user'
+          });
+        } catch (error) {
+          Logger.debug(`无法获取用户 ${userId} 信息:`, error);
+        }
+      }
+    }
+    
+    if (this.config.adminUsers) {
+      for (const userId of this.config.adminUsers) {
+        try {
+          const userInfo = await this.getUserInfo(userId.toString());
+          friendList.push({
+            ...userInfo,
+            permission: 'admin'
+          });
+        } catch (error) {
+          Logger.debug(`无法获取管理员 ${userId} 信息:`, error);
+        }
+      }
+    }
+    
+    if (this.config.ownerUsers) {
+      for (const userId of this.config.ownerUsers) {
+        try {
+          const userInfo = await this.getUserInfo(userId.toString());
+          friendList.push({
+            ...userInfo,
+            permission: 'owner'
+          });
+        } catch (error) {
+          Logger.debug(`无法获取主人 ${userId} 信息:`, error);
+        }
+      }
+    }
+    
+    return friendList;
   }
   public async kickUser(userId: string, groupId?: string): Promise<void> {
-    throw new Error('kickUser not implemented for TelegramAdapter');
+    if (!this.connected) {
+      throw new Error('Telegram adapter 未连接');
+    }
+
+    if (!groupId) {
+      throw new Error('Telegram kickUser 需要指定 groupId');
+    }
+
+    try {
+      await this.makeApiCall('banChatMember', { 
+        chat_id: groupId, 
+        user_id: userId,
+        revoke_messages: true // 撤销用户消息
+      });
+      Logger.info(`用户 ${userId} 已从群组 ${groupId} 中踢出`);
+    } catch (error) {
+      Logger.error(`踢出用户失败:`, error);
+      throw error;
+    }
   }
+  
   public async muteUser(userId: string, groupId?: string, duration?: number): Promise<void> {
-    throw new Error('muteUser not implemented for TelegramAdapter');
+    if (!this.connected) {
+      throw new Error('Telegram adapter 未连接');
+    }
+
+    if (!groupId) {
+      throw new Error('Telegram muteUser 需要指定 groupId');
+    }
+
+    try {
+      const untilDate = duration ? Math.floor(Date.now() / 1000) + duration : 0;
+      
+      await this.makeApiCall('restrictChatMember', {
+        chat_id: groupId,
+        user_id: userId,
+        until_date: untilDate,
+        permissions: {
+          can_send_messages: false,
+          can_send_media_messages: false,
+          can_send_polls: false,
+          can_send_other_messages: false,
+          can_add_web_page_previews: false,
+          can_change_info: false,
+          can_invite_users: false,
+          can_pin_messages: false
+        }
+      });
+      
+      const durationText = duration ? `${duration}秒` : '永久';
+      Logger.info(`用户 ${userId} 在群组 ${groupId} 中被禁言 ${durationText}`);
+    } catch (error) {
+      Logger.error(`禁言用户失败:`, error);
+      throw error;
+    }
   }
 
   private async makeApiCall(method: string, params?: any): Promise<any> {
@@ -778,7 +992,11 @@ export class TelegramAdapter implements Adapter {
 
   // ====== 消息引用 ======
   public async sendReplyMessage(chatId: string, text: string, replyToMessageId: number, options?: any): Promise<void> {
-    await this.sendMessage(chatId, text, { ...options, reply_to_message_id: replyToMessageId });
+    const params: any = {
+      reply_to_message_id: replyToMessageId,
+      ...options
+    };
+    await this.sendMessage(chatId, text, params);
   }
 }
 

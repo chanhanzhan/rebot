@@ -41,9 +41,9 @@ adapters:
       port: 3443      # Webhook端口
 
   http:
-    enabled: false
-    port: 3000        # HTTP服务端口
-    host: "0.0.0.0"   # 监听地址
+    enabled: true
+    port: 5431
+    host: "0.0.0.0"
     apiKey: ""        # API密钥（可选）
     allowedIPs: []    # IP白名单（可选）
     defaultPermission: "USER"  # 默认权限级别
@@ -52,6 +52,34 @@ adapters:
       enabled: true
       origin: "*"
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    # OneBot集成配置
+    onebot:
+      enabled: true
+      http:
+        enabled: true
+        host: "127.0.0.1"
+        port: 5700
+        timeout: 0
+        post_timeout: 0
+      ws:
+        enabled: false
+        host: "127.0.0.1"
+        port: 6700
+      ws_reverse:
+        enabled: false
+        universal: ""
+        api: ""
+        event: ""
+        reconnect_interval: 3000
+      access_token: ""
+      secret: ""
+      plugin_routes:
+        enabled: true
+        base_path: "/plugins"
+      post_message_format: "string"
+      enable_cors: true
+      cors_origin: "*"
+    
 
 database:
   type: redis
@@ -67,6 +95,15 @@ plugins:
   directory: "./plugins"
   autoLoad: true
   hotReload: true
+
+  plugin_routes:
+    enabled: true
+    base_path: "/plugins"  # 插件路由基础路径
+
+  # 其他配置
+  post_message_format: "string"  # 消息格式：string 或 array
+  enable_cors: true              # 启用CORS
+  cors_origin: "*"               # CORS允许的源，可以是字符串或数组
 
 logging:
   level: info
