@@ -1,4 +1,4 @@
-import { Adapter, Message, PermissionLevel } from '../common/types';
+import { Adapter, Message } from '../common/types';
 import { Logger } from '../config/log';
 import { FrameworkEventBus } from '../common/event-bus';
 import { ConfigManager } from '../config/config';
@@ -220,6 +220,15 @@ export class AdapterManager {
       
       // 初始化连接池
       this.initializeConnectionPool(adapter.name);
+      
+      // 如果是HTTP适配器，设置OneBot适配器的适配器管理器引用
+      if (adapter.name === 'http' && typeof (adapter as any).onebotAdapter !== 'undefined') {
+        const httpAdapter = adapter as any;
+        if (httpAdapter.onebotAdapter && typeof httpAdapter.onebotAdapter.setAdapterManager === 'function') {
+          httpAdapter.onebotAdapter.setAdapterManager(this);
+          Logger.info('✅ OneBot适配器已设置适配器管理器引用');
+        }
+      }
       
       // 设置消息监听
       adapter.onMessage((message: Message) => {
@@ -1207,9 +1216,9 @@ export class AdapterManager {
         Logger.info('正在自动加载控制台适配器...');
         try {
           const ConsoleAdapterModule = await import('./console-adapter');
-          const ConsoleAdapter = ConsoleAdapterModule.default || ConsoleAdapterModule.ConsoleAdapter;
+          const ConsoleAdapter = ConsoleAdapterModule.ConsoleAdapter;
           const adapter = new ConsoleAdapter();
-          await this.registerAdapter(adapter);
+          await this.registerAdapter(adapter.getAdapterWrapper());
           Logger.info('控制台适配器自动加载成功');
         } catch (error) {
           Logger.error('控制台适配器自动加载失败:', error);
@@ -1234,7 +1243,7 @@ export class AdapterManager {
             autoAcceptFriend: adaptersConfig.qq.autoAcceptFriend,
             autoAcceptGroupInvite: adaptersConfig.qq.autoAcceptGroupInvite
           });
-          await this.registerAdapter(adapter);
+          await this.registerAdapter(adapter.getAdapterWrapper());
           Logger.info('QQ适配器自动加载成功');
         } catch (error) {
           Logger.error('QQ适配器自动加载失败:', error);
@@ -1256,7 +1265,7 @@ export class AdapterManager {
             polling: adaptersConfig.telegram.polling,
             webhook: adaptersConfig.telegram.webhook
           });
-          await this.registerAdapter(adapter);
+          await this.registerAdapter(adapter.getAdapterWrapper());
           Logger.info('Telegram适配器自动加载成功');
         } catch (error) {
           Logger.error('Telegram适配器自动加载失败:', error);
@@ -1268,18 +1277,9 @@ export class AdapterManager {
       if (adaptersConfig.http?.enabled) {
         Logger.info('正在自动加载HTTP API适配器...');
         try {
-          const HTTPAdapterModule = await import('./http-adapter');
-          const HTTPAdapter = HTTPAdapterModule.default || HTTPAdapterModule.HTTPAdapter;
-          const adapter = new HTTPAdapter({
-            port: adaptersConfig.http.port,
-            host: adaptersConfig.http.host,
-            apiKey: adaptersConfig.http.apiKey,
-            allowedIPs: adaptersConfig.http.allowedIPs,
-            defaultPermission: adaptersConfig.http.defaultPermission,
-            userPermissions: adaptersConfig.http.userPermissions,
-            cors: adaptersConfig.http.cors,
-            onebot: adaptersConfig.http.onebot
-          });
+          const HTTPAdapterModule = await import('./http-adapter-standalone');
+          const HTTPAdapter = HTTPAdapterModule.HttpAdapterStandalone;
+          const adapter = new HTTPAdapter();
           await this.registerAdapter(adapter);
           Logger.info('HTTP API适配器自动加载成功');
         } catch (error) {

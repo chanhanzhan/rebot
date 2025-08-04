@@ -1,19 +1,18 @@
-import { BasePlugin } from './plugin';
-import { PluginFunction } from '../common/types';
-import { Logger } from '../config/log';
-import { FrameworkEventBus } from '../common/event-bus';
-import { ConfigManager } from '../config/config';
+import { BasePlugin } from './plugin.js';
+import { PluginFunction } from '../common/types.js';
+import { Logger } from '../config/log.js';
+import { FrameworkEventBus } from '../common/event-bus.js';
+import { ConfigManager } from '../config/config.js';
 import { NodeVM } from 'vm2';
 import * as path from 'path';
-import { DatabaseManager } from '../database/database-manager';
-import { RedisDatabase } from '../config/readis';
+import { DatabaseManager } from '../database/database-manager.js';
+import { RedisDatabase } from '../config/readis.js';
 import * as fs from 'fs';
 import * as chokidar from 'chokidar';
-import { OneBotHTTPAdapter, PluginHttpRoute } from '../adapter/onebot-http-adapter';
 import * as http from 'http';
 import * as url from 'url';
-import { EventBus } from '../common/event-bus';
-import { EventType, PluginEvent, LogLevel, LogCategory } from '../common/event-types';
+import { EventBus } from '../common/event-bus.js';
+import { EventType, PluginEvent, LogLevel, LogCategory } from '../common/event-types.js';
 
 export interface PluginStats {
   name: string;
@@ -50,6 +49,14 @@ export interface PluginDependency {
 }
 
 // 插件HTTP服务接口
+export interface PluginHttpRoute {
+  pluginName: string;
+  path: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'ALL';
+  handler: (req: http.IncomingMessage, res: http.ServerResponse, body?: any) => Promise<void>;
+  middleware?: Array<(req: http.IncomingMessage, res: http.ServerResponse, next: () => void) => void>;
+}
+
 export interface PluginHttpService {
   pluginName: string;
   routes: PluginHttpRoute[];
@@ -89,7 +96,6 @@ export class PluginManager {
   private totalLoadTime: number = 0;
 
   // HTTP服务管理
-  private httpAdapter?: OneBotHTTPAdapter;
   private pluginHttpServices: Map<string, PluginHttpService> = new Map();
 
   private constructor() {
@@ -909,8 +915,8 @@ export class PluginManager {
   }
 
   // HTTP服务管理方法
-  public setHttpAdapter(adapter: OneBotHTTPAdapter): void {
-    this.httpAdapter = adapter;
+  public setHttpAdapter(adapter: any): void {
+    // HTTP适配器设置方法，暂时保留接口兼容性
     Logger.info('HTTP适配器已设置到插件管理器');
   }
 
@@ -919,16 +925,12 @@ export class PluginManager {
    * 插件可以申请注册框架的HTTP目录以提供服务
    */
   public registerPluginHttpRoute(pluginName: string, route: Omit<PluginHttpRoute, 'pluginName'>): void {
-    if (!this.httpAdapter) {
-      throw new Error('HTTP适配器未设置，无法注册插件路由');
-    }
-
+    Logger.warn('HTTP路由注册功能暂未实现');
+    
     const fullRoute: PluginHttpRoute = {
       ...route,
       pluginName: pluginName
     };
-    
-    this.httpAdapter.registerPluginRoute(fullRoute);
     
     // 更新本地服务记录
     let service = this.pluginHttpServices.get(pluginName);
@@ -949,9 +951,7 @@ export class PluginManager {
    * 支持插件一次性注册多个路由
    */
   public registerPluginHttpRoutes(pluginName: string, routes: Omit<PluginHttpRoute, 'pluginName'>[]): void {
-    if (!this.httpAdapter) {
-      throw new Error('HTTP适配器未设置，无法注册插件路由');
-    }
+    Logger.warn('批量HTTP路由注册功能暂未实现');
 
     for (const route of routes) {
       this.registerPluginHttpRoute(pluginName, route);
@@ -969,29 +969,10 @@ export class PluginManager {
     cors?: boolean;
     rateLimit?: { windowMs: number; max: number };
   }): string {
-    if (!this.httpAdapter) {
-      throw new Error('HTTP适配器未设置，无法申请插件HTTP目录');
-    }
+    Logger.warn('插件HTTP目录申请功能暂未实现');
 
     const baseDirectory = `/plugins/${pluginName}`;
     
-    // 注册通配符路由来处理该插件目录下的所有请求
-    const wildcardRoute: PluginHttpRoute = {
-      pluginName: pluginName,
-      path: '/*',
-      method: 'ALL',
-      handler: async (req, res, body) => {
-        // 默认处理器，插件可以通过注册具体路由来覆盖
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          error: 'Route not found',
-          message: `No handler registered for ${req.method} ${req.url}`,
-          plugin: pluginName
-        }));
-      },
-      middleware: options?.middleware
-    };
-
     // 更新本地服务记录
     let service = this.pluginHttpServices.get(pluginName);
     if (!service) {
@@ -1038,12 +1019,7 @@ export class PluginManager {
   }
 
   public unregisterPluginHttpRoute(pluginName: string, method: string, path: string): void {
-    if (!this.httpAdapter) {
-      Logger.warn('HTTP适配器未设置，无法注销插件路由');
-      return;
-    }
-
-    this.httpAdapter.unregisterPluginRoute(pluginName, method, path);
+    Logger.warn('HTTP路由注销功能暂未实现');
 
     // 从记录中移除
     const service = this.pluginHttpServices.get(pluginName);
@@ -1057,17 +1033,26 @@ export class PluginManager {
   }
 
   public unregisterAllPluginHttpRoutes(pluginName: string): void {
-    if (!this.httpAdapter) {
-      Logger.warn('HTTP适配器未设置，无法注销插件路由');
-      return;
-    }
+    Logger.warn('批量HTTP路由注销功能暂未实现');
 
-    this.httpAdapter.unregisterPluginRoutes(pluginName);
+    // 从记录中移除
     this.pluginHttpServices.delete(pluginName);
-    Logger.info(`插件 ${pluginName} 的所有HTTP路由已注销`);
+
+    Logger.info(`插件 ${pluginName} 注销所有HTTP路由`);
   }
 
-  public async startPluginHttpServer(pluginName: string, port: number, routes: PluginHttpRoute[]): Promise<void> {
+  /**
+   * 启动插件HTTP服务器
+   * 为插件提供独立的HTTP服务
+   */
+  public async startPluginHttpServer(port?: number): Promise<void> {
+    Logger.warn('插件HTTP服务器启动功能暂未实现');
+    
+    const serverPort = port || 3001;
+    Logger.info(`插件HTTP服务器将在端口 ${serverPort} 启动（功能暂未实现）`);
+  }
+
+  public async startPluginHttpServerWithRoutes(pluginName: string, port: number, routes: PluginHttpRoute[]): Promise<void> {
     const service = this.pluginHttpServices.get(pluginName);
     if (service?.server) {
       throw new Error(`插件 ${pluginName} 的HTTP服务器已在运行`);

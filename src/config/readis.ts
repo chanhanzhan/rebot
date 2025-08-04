@@ -118,6 +118,10 @@ export class RedisDatabase implements DatabaseInterface {
     }
   }
 
+  public isConnected(): boolean {
+    return this.connected && this.client !== null;
+  }
+
   public async get(key: string): Promise<string | null> {
     if (!this.client) throw new Error('Redis is not connected');
     return await this.client.get(key);

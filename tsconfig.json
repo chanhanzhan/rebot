@@ -16,7 +16,8 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "types": ["node"],
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "downlevelIteration": true
   },
   "include": [
     "src/**/*",

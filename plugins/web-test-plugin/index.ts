@@ -1,44 +1,148 @@
-import { BasePlugin } from "../../src/plugins/plugin";
-import { PluginFunction } from "../../src/common/types";
-import { Logger } from "../../src/config/log";
+import { BasePlugin, PluginMetadata, PluginFunction, RouteDefinition } from '../../src/plugins/base-plugin';
+import { Logger } from '../../src/config/log';
 import * as http from 'http';
-import * as fs from 'fs';
+import * as url from 'url';
 import * as path from 'path';
+import * as fs from 'fs';
 
+/**
+ * Web测试插件
+ * 提供Web界面用于测试机器人功能
+ */
 export class WebTestPlugin extends BasePlugin {
-  public name: string = 'web-test-plugin';
-  public version: string = '1.0.0';
-  public description: string = 'Web测试插件，提供HTTP API测试界面';
+  public readonly metadata: PluginMetadata = {
+    name: 'web-test-plugin',
+    version: '1.0.0',
+    description: 'Web测试插件，提供HTTP测试功能',
+    author: 'System',
+    dependencies: [],
+    permissions: ['web:test']
+  };
   
   private server?: http.Server;
-  private port: number = 8080;
+  private port: number = 5432;
+  private events: any[] = [];
+  private logs: string[] = [];
 
   constructor() {
     super();
   }
 
-  async load(): Promise<void> {
-    Logger.info('🌐 Web测试插件加载中...');
-    
-    // 获取框架的HTTP端口，如果存在的话
-    const frameworkPort = this.getFrameworkPort();
-    if (frameworkPort) {
-      this.port = frameworkPort + 1; // 使用框架端口+1
-    }
-    
+  protected async onLoad(): Promise<void> {
+    Logger.info('WebTestPlugin: 加载中...');
     await this.startWebServer();
-    Logger.info(`✅ Web测试插件已启动: http://localhost:${this.port}`);
+    Logger.info('WebTestPlugin: 加载完成');
   }
 
-  async unload(): Promise<void> {
+  protected async onInitialize(): Promise<void> {
+    Logger.info('WebTestPlugin: 初始化中...');
+    // Web测试插件初始化逻辑
+    Logger.info('WebTestPlugin: 初始化完成');
+  }
+
+  protected async onStart(): Promise<void> {
+    Logger.info('WebTestPlugin: 启动中...');
+    // Web测试插件启动逻辑
+    Logger.info('WebTestPlugin: 启动完成');
+  }
+
+  protected async onStop(): Promise<void> {
+    Logger.info('WebTestPlugin: 停止中...');
     if (this.server) {
       this.server.close();
-      Logger.info('🔌 Web测试服务器已关闭');
+      this.server = undefined;
+    }
+    Logger.info('WebTestPlugin: 停止完成');
+  }
+
+  protected async onUnload(): Promise<void> {
+    Logger.info('WebTestPlugin: 卸载中...');
+    if (this.server) {
+      this.server.close();
+      this.server = undefined;
+    }
+    Logger.info('WebTestPlugin: 卸载完成');
+  }
+
+  protected getRoutes(): RouteDefinition[] {
+    return [];
+  }
+
+  public getFunctions(): PluginFunction[] {
+    return [
+      {
+        name: 'test-web-request',
+        description: '测试Web请求',
+        parameters: [
+          { name: 'url', type: 'string', description: '请求URL' },
+          { name: 'method', type: 'string', description: '请求方法', default: 'GET' }
+        ],
+        handler: async (url: string, method: string = 'GET') => {
+          return await this.testWebRequest(url, method);
+        }
+      }
+    ];
+  }
+
+  public async healthCheck(): Promise<boolean> {
+    try {
+      // 检查插件是否正常运行
+      if (!this.lifecycleState.isLoaded || !this.lifecycleState.isInitialized) {
+        return false;
+      }
+      
+      // 检查Web服务器是否正在运行
+      if (!this.server || !this.server.listening) {
+        Logger.debug('WebTestPlugin: Web服务器未运行');
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      Logger.error('WebTestPlugin 健康检查异常', error);
+      return false;
     }
   }
 
-  getFunctions(): PluginFunction[] {
-    return [];
+  private async testWebRequest(url: string, method: string = 'GET'): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const options = {
+        method: method.toUpperCase(),
+        timeout: 5000
+      };
+
+      const req = http.request(url, options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        res.on('end', () => {
+          resolve({
+            success: true,
+            status: res.statusCode,
+            headers: res.headers,
+            data: data
+          });
+        });
+      });
+
+      req.on('error', (error) => {
+        reject({
+          success: false,
+          error: error.message
+        });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        reject({
+          success: false,
+          error: 'Request timeout'
+        });
+      });
+
+      req.end();
+    });
   }
 
   private getFrameworkPort(): number | null {
@@ -66,21 +170,33 @@ export class WebTestPlugin extends BasePlugin {
   private async startWebServer(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.server = http.createServer((req, res) => {
-        this.handleRequest(req, res);
+        try {
+          this.handleRequest(req, res);
+        } catch (error) {
+          Logger.error('处理HTTP请求失败', error);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            success: false,
+            error: error instanceof Error ? error.message : String(error)
+          }));
+        }
       });
 
       this.server.listen(this.port, () => {
+        Logger.info(`🌐 Web测试服务器启动成功，端口: ${this.port}`);
         resolve();
       });
 
       this.server.on('error', (error) => {
+        Logger.error('Web测试服务器启动失败', error);
         reject(error);
       });
     });
   }
 
   private handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
-    const url = req.url || '/';
+    const parsedUrl = url.parse(req.url || '', true);
+    const pathname = parsedUrl.pathname;
     
     // 设置CORS头
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -93,21 +209,26 @@ export class WebTestPlugin extends BasePlugin {
       return;
     }
 
-    if (url === '/') {
-      this.serveHomePage(res);
-    } else if (url === '/api/status') {
-      this.serveApiStatus(res);
-    } else if (url === '/api/events') {
-      this.serveEvents(res);
-    } else if (url === '/api/logs') {
-      this.serveLogs(res);
-    } else {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('页面未找到');
+    switch (pathname) {
+      case '/':
+        this.serveHtml(req, res);
+        break;
+      case '/api/status':
+        this.serveApiStatus(req, res);
+        break;
+      case '/api/events':
+        this.serveEvents(req, res);
+        break;
+      case '/api/logs':
+        this.serveLogs(req, res);
+        break;
+      default:
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not Found' }));
     }
   }
 
-  private serveHomePage(res: http.ServerResponse): void {
+  private serveHtml(req: http.IncomingMessage, res: http.ServerResponse): void {
     const html = `
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -325,11 +446,11 @@ export class WebTestPlugin extends BasePlugin {
     res.end(html);
   }
 
-  private serveApiStatus(res: http.ServerResponse): void {
+  private serveApiStatus(req: http.IncomingMessage, res: http.ServerResponse): void {
     const status = {
       timestamp: new Date().toISOString(),
-      plugin: 'web-test-plugin',
-      version: '1.0.0',
+      plugin: this.metadata.name,
+      version: this.metadata.version,
       port: this.port,
       uptime: process.uptime(),
       memory: process.memoryUsage(),
@@ -340,10 +461,10 @@ export class WebTestPlugin extends BasePlugin {
     res.end(JSON.stringify(status, null, 2));
   }
 
-  private serveEvents(res: http.ServerResponse): void {
+  private serveEvents(req: http.IncomingMessage, res: http.ServerResponse): void {
     const events = {
       timestamp: new Date().toISOString(),
-      events: [
+      events: this.events.length > 0 ? this.events : [
         `系统启动 - ${new Date().toLocaleString()}`,
         'Web测试插件加载完成',
         'HTTP服务器启动成功',
@@ -356,10 +477,10 @@ export class WebTestPlugin extends BasePlugin {
     res.end(JSON.stringify(events, null, 2));
   }
 
-  private serveLogs(res: http.ServerResponse): void {
+  private serveLogs(req: http.IncomingMessage, res: http.ServerResponse): void {
     const logs = {
       timestamp: new Date().toISOString(),
-      logs: [
+      logs: this.logs.length > 0 ? this.logs : [
         `[${new Date().toISOString()}] INFO: Web测试插件已启动`,
         `[${new Date().toISOString()}] INFO: HTTP服务器运行在端口 ${this.port}`,
         `[${new Date().toISOString()}] INFO: 等待连接...`,

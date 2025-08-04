@@ -105,8 +105,11 @@ export class Logger {
   }
   private static stringify(arg: any): string {
     if (typeof arg === 'string') return arg;
+    if (arg instanceof Error) {
+      return `${arg.name}: ${arg.message}\n${arg.stack}`;
+    }
     try {
-      return JSON.stringify(arg);
+      return JSON.stringify(arg, null, 2);
     } catch {
       return String(arg);
     }

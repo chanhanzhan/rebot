@@ -1,5 +1,6 @@
-import { Adapter, Message, PermissionLevel } from '../common/types';
+import { BaseAdapter, AdapterMetadata, MessageContext } from './base-adapter';
 import { Logger } from '../config/log';
+import { Message, PermissionLevel, Adapter } from '../common/types';
 import * as readline from 'readline';
 
 export interface ConsoleConfig {
@@ -11,38 +12,80 @@ export interface ConsoleConfig {
   enableColors?: boolean;
 }
 
-export class ConsoleAdapter implements Adapter {
-  public name = 'console';
-  private config: ConsoleConfig;
-  private connected = false;
-  private messageCallback?: (message: Message) => void;
-  private rl?: readline.Interface;
-  private messageHistory: string[] = [];
-
-  constructor(config: ConsoleConfig = {}) {
-    this.config = {
+export class ConsoleAdapter extends BaseAdapter {
+  public readonly metadata: AdapterMetadata = {
+    name: 'console-adapter',
+    version: '2.0.0',
+    description: '控制台适配器，支持命令行交互',
+    author: 'Framework Team',
+    type: 'bidirectional',
+    protocol: 'console',
+    dependencies: [],
+    priority: 200,
+    config: {
       username: 'Console User',
       permission: PermissionLevel.OWNER,
       prompt: '[控制台] ',
       enableHistory: true,
       historySize: 100,
-      enableColors: true,
-      ...config
-    };
+      enableColors: true
+    }
+  };
+
+  private consoleConfig?: ConsoleConfig;
+  private rl?: readline.Interface;
+  private messageHistory: string[] = [];
+  private messageCallback?: (message: Message) => void;
+  private currentUser: string = 'Console User';
+  private currentPermission: PermissionLevel = PermissionLevel.OWNER;
+
+  constructor() {
+    super();
   }
 
-  public async connect(): Promise<void> {
-    Logger.info('正在连接控制台适配器');
-    
+  /**
+   * 获取控制台配置
+   */
+  private getConsoleConfig(): ConsoleConfig {
+    if (!this.consoleConfig) {
+      this.consoleConfig = this.metadata.config as ConsoleConfig;
+    }
+    return this.consoleConfig;
+  }
+
+  /**
+   * 适配器加载
+   */
+  protected async onLoad(): Promise<void> {
+    Logger.debug('控制台适配器开始加载');
+    // 控制台适配器无需特殊加载逻辑
+    Logger.debug('控制台适配器加载完成');
+  }
+
+  /**
+   * 适配器初始化
+   */
+  protected async onInitialize(): Promise<void> {
+    Logger.debug('控制台适配器开始初始化');
     this.setupReadline();
-    this.connected = true;
+    Logger.debug('控制台适配器初始化完成');
+  }
+
+  /**
+   * 适配器连接
+   */
+  protected async onConnect(): Promise<void> {
+    Logger.info('正在连接控制台适配器');
     
     Logger.info('控制台适配器已连接，可以开始输入消息');
     this.showWelcomeMessage();
     this.promptUser();
   }
 
-  public async disconnect(): Promise<void> {
+  /**
+   * 适配器断开连接
+   */
+  protected async onDisconnect(): Promise<void> {
     Logger.info('正在断开控制台适配器');
     
     if (this.rl) {
@@ -50,81 +93,49 @@ export class ConsoleAdapter implements Adapter {
       this.rl = undefined;
     }
     
-    this.connected = false;
     Logger.info('控制台适配器已断开');
   }
 
-  public async sendMessage(target: string, content: string): Promise<void> {
+  /**
+   * 适配器卸载
+   */
+  protected async onUnload(): Promise<void> {
+    Logger.debug('控制台适配器开始卸载');
+    
+    if (this.rl) {
+      this.rl.close();
+      this.rl = undefined;
+    }
+    
+    this.messageHistory = [];
+    
+    Logger.debug('控制台适配器卸载完成');
+  }
+
+  /**
+   * 发送消息 - 重写BaseAdapter方法
+   */
+  protected async onSendMessage(context: MessageContext): Promise<void> {
+    const config = this.getConsoleConfig();
     const timestamp = new Date().toLocaleTimeString();
-    const coloredContent = this.config.enableColors ? 
-      `\x1b[32m[Bot -> ${target}]\x1b[0m ${content}` : 
-      `[Bot -> ${target}] ${content}`;
+    const coloredContent = config.enableColors ? 
+      `\x1b[32m[Bot -> ${context.target || 'console'}]\x1b[0m ${context.content}` : 
+      `[Bot -> ${context.target || 'console'}] ${context.content}`;
     
     console.log(`${timestamp} ${coloredContent}`);
     
     // 重新显示提示符
-    if (this.rl && this.connected) {
-      this.rl.prompt();
-    }
+    this.promptUser();
   }
 
-  public onMessage(callback: (message: Message) => void): void {
-    Logger.debug('[控制台适配器] 设置消息回调函数');
-    this.messageCallback = callback;
-  }
-
-  public isConnected(): boolean {
-    return this.connected;
-  }
-
-  // ====== 适配器通用/特有API补全 ======
-  public async getBotInfo(): Promise<any> {
-    return {
-      name: this.name,
-      username: this.config.username,
-      permission: this.config.permission,
-      platform: 'console',
-      status: this.connected ? 'online' : 'offline'
-    };
-  }
-  public getSessionList(): string[] {
-    return ['console_user'];
-  }
-  public async sendFile(target: string, filePath: string): Promise<void> {
-    throw new Error('sendFile not supported by console adapter');
-  }
-  public async getUserInfo(userId: string): Promise<any> {
-    if (userId === 'console_user') {
-      return {
-        id: 'console_user',
-        name: this.config.username,
-        permission: this.config.permission
-      };
-    }
-    return null;
-  }
-  public async broadcastMessage(content: string): Promise<void> {
-    await this.sendMessage('console_user', content);
-  }
-  public async getGroupList(): Promise<any[]> {
-    return [];
-  }
-  public async getFriendList(): Promise<any[]> {
-    return [{ id: 'console_user', name: this.config.username }];
-  }
-  public async kickUser(userId: string, groupId?: string): Promise<void> {
-    throw new Error('kickUser not supported by console adapter');
-  }
-  public async muteUser(userId: string, groupId?: string, duration?: number): Promise<void> {
-    throw new Error('muteUser not supported by console adapter');
-  }
-
+  /**
+   * 设置readline接口
+   */
   private setupReadline(): void {
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
-      prompt: this.config.prompt,
-      historySize: this.config.enableHistory ? this.config.historySize : 0
+      prompt: this.getConsoleConfig().prompt || '[控制台] '
     });
 
     this.rl.on('line', (input: string) => {
@@ -133,18 +144,15 @@ export class ConsoleAdapter implements Adapter {
 
     this.rl.on('close', () => {
       Logger.info('控制台输入已关闭');
-      this.connected = false;
     });
-/*
-    this.rl.on('SIGINT', () => {
-      console.log('\n使用 /quit 或 /exit 退出程序');
-      this.rl?.prompt();
-    });
-*/    
   }
 
+  /**
+   * 处理用户输入
+   */
   private handleInput(input: string): void {
-    if (!this.connected || !this.messageCallback) {
+    if (!input) {
+      this.promptUser();
       return;
     }
 
@@ -154,181 +162,199 @@ export class ConsoleAdapter implements Adapter {
       return;
     }
 
-    // 忽略空输入
-    if (!input) {
-      this.promptUser();
-      return;
-    }
-
     // 添加到历史记录
-    if (this.config.enableHistory) {
-      this.addToHistory(input);
+    const config = this.getConsoleConfig();
+    if (config.enableHistory) {
+      this.messageHistory.push(input);
+      if (this.messageHistory.length > (config.historySize || 100)) {
+        this.messageHistory.shift();
+      }
     }
 
     // 创建消息对象
-    const message: Message = {
+    const message = {
       id: Date.now().toString(),
       content: input,
       sender: {
-        id: 'console_user',
-        name: this.config.username!,
-        permission: this.config.permission!
+        id: 'console-user',
+        name: this.currentUser,
+        permission: this.currentPermission
       },
       platform: 'console',
-      timestamp: Date.now(),
-      extra: {
-        source: 'console_input'
-      }
+      timestamp: Date.now()
     };
 
-    Logger.debug(`[控制台适配器] 控制台输入: ${input}`);
-    this.messageCallback(message);
-  
+    // 触发消息事件
+    this.receiveMessage({
+      id: message.id,
+      timestamp: new Date(message.timestamp),
+      source: 'console',
+      type: 'text',
+      content: message
+    });
     this.promptUser();
   }
 
+  /**
+   * 处理控制台命令
+   */
   private handleCommand(command: string): void {
     const [cmd, ...args] = command.slice(1).split(' ');
-    
+    const config = this.getConsoleConfig();
+
     switch (cmd.toLowerCase()) {
       case 'help':
-        this.showHelp();
+        console.log('\n可用命令:');
+        console.log('  /help - 显示帮助信息');
+        console.log('  /quit - 退出程序');
+        console.log('  /clear - 清屏');
+        console.log('  /user <name> - 设置用户名');
+        console.log('  /permission <level> - 设置权限级别 (owner/admin/user)');
+        console.log('  /history - 显示消息历史');
+        console.log('  /status - 显示适配器状态\n');
         break;
-        
+
       case 'quit':
       case 'exit':
-        this.disconnect();
+        console.log('正在退出...');
         process.exit(0);
         break;
-        
+
       case 'clear':
         console.clear();
         this.showWelcomeMessage();
         break;
-        
-      case 'history':
-        this.showHistory();
-        break;
-        
-      case 'status':
-        this.showStatus();
-        break;
-        
+
       case 'user':
-        this.handleUserCommand(args);
+        if (args.length > 0) {
+          this.consoleConfig = { ...config, username: args.join(' ') };
+          console.log(`用户名已设置为: ${this.consoleConfig.username}`);
+        } else {
+          console.log(`当前用户名: ${config.username}`);
+        }
         break;
-        
+
+      case 'permission':
+        if (args.length > 0) {
+          const level = args[0].toLowerCase();
+          if (['owner', 'admin', 'user'].includes(level)) {
+            this.consoleConfig = { ...config, permission: level as unknown as PermissionLevel };
+            console.log(`权限级别已设置为: ${this.consoleConfig.permission}`);
+          } else {
+            console.log('无效的权限级别，可用值: owner, admin, user');
+          }
+        } else {
+          console.log(`当前权限级别: ${config.permission}`);
+        }
+        break;
+
+      case 'history':
+        if (this.messageHistory.length === 0) {
+          console.log('暂无消息历史');
+        } else {
+          console.log('\n消息历史:');
+          this.messageHistory.forEach((msg, index) => {
+            console.log(`  ${index + 1}. ${msg}`);
+          });
+          console.log();
+        }
+        break;
+
+      case 'status':
+        console.log('\n适配器状态:');
+        console.log(`  名称: ${this.metadata.name}`);
+        console.log(`  版本: ${this.metadata.version}`);
+        console.log(`   状态: ${this.getStats().connectionStatus}`);
+        console.log(`  用户: ${config.username}`);
+        console.log(`  权限: ${config.permission}`);
+        console.log(`  历史记录: ${this.messageHistory.length} 条\n`);
+        break;
+
       default:
-        console.log(`未知命令: ${cmd}。输入 /help 查看可用命令。`);
+        console.log(`未知命令: ${cmd}，输入 /help 查看可用命令`);
+        break;
     }
-    
+
     this.promptUser();
   }
 
-  private handleUserCommand(args: string[]): void {
-    if (args.length === 0) {
-      console.log(`当前用户: ${this.config.username} (权限: ${this.config.permission})`);
-      return;
-    }
-
-    const [action, ...params] = args;
-    
-    switch (action) {
-      case 'name':
-        if (params.length > 0) {
-          this.config.username = params.join(' ');
-          console.log(`用户名已更改为: ${this.config.username}`);
-        } else {
-          console.log('请提供用户名');
-        }
-        break;
-        
-      case 'permission':
-        if (params.length > 0) {
-          const permission = params[0].toUpperCase() as keyof typeof PermissionLevel;
-          if (permission in PermissionLevel) {
-            this.config.permission = PermissionLevel[permission];
-            console.log(`权限已更改为: ${this.config.permission}`);
-          } else {
-            console.log('无效的权限级别。可用选项: USER, ADMIN, OWNER');
-          }
-        } else {
-          console.log('请提供权限级别 (USER, ADMIN, OWNER)');
-        }
-        break;
-        
-      default:
-        console.log('可用的用户命令: name <名称>, permission <级别>');
-    }
-  }
-
+  /**
+   * 显示欢迎消息
+   */
   private showWelcomeMessage(): void {
-    if (!this.config.enableColors) {
-      console.log('=== Bot 控制台适配器 ===');
-      console.log('输入消息与Bot交互，或使用 /help 查看命令');
-      return;
-    }
-
-    console.log('\x1b[36m╔══════════════════════════════════╗\x1b[0m');
-    console.log('\x1b[36m║      Bot 控制台适配器           ║\x1b[0m');
-    console.log('\x1b[36m╚══════════════════════════════════╝\x1b[0m');
-    console.log('\x1b[33m输入消息与Bot交互，或使用 /help 查看命令\x1b[0m');
-    console.log();
-  }
-
-  private showHelp(): void {
-    console.log('\n可用命令:');
-    console.log('  /help     - 显示此帮助信息');
-    console.log('  /quit     - 退出程序');
-    console.log('  /exit     - 退出程序');
-    console.log('  /clear    - 清屏');
-    console.log('  /history  - 显示消息历史');
-    console.log('  /status   - 显示状态信息');
-    console.log('  /user     - 显示当前用户信息');
-    console.log('  /user name <名称> - 设置用户名');
-    console.log('  /user permission <级别> - 设置权限级别');
-    console.log();
-  }
-
-  private showHistory(): void {
-    if (this.messageHistory.length === 0) {
-      console.log('消息历史为空');
-      return;
-    }
-
-    console.log('\n消息历史:');
-    this.messageHistory.slice(-10).forEach((msg, index) => {
-      console.log(`  ${index + 1}. ${msg}`);
-    });
-    console.log();
-  }
-
-  private showStatus(): void {
-    console.log('\n状态信息:');
-    console.log(`  适配器: ${this.name}`);
-    console.log(`  连接状态: ${this.connected ? '已连接' : '未连接'}`);
-    console.log(`  用户: ${this.config.username}`);
-    console.log(`  权限: ${this.config.permission}`);
-    console.log(`  历史记录: ${this.messageHistory.length} 条消息`);
-    console.log(`  进程运行时间: ${Math.floor(process.uptime())} 秒`);
-    console.log();
-  }
-
-  private addToHistory(message: string): void {
-    this.messageHistory.push(message);
-    
-    // 限制历史记录大小
-    if (this.messageHistory.length > this.config.historySize!) {
-      this.messageHistory.shift();
+    const config = this.getConsoleConfig();
+    if (config.enableColors) {
+      console.log('\x1b[36m╔══════════════════════════════════════╗\x1b[0m');
+      console.log('\x1b[36m║          控制台适配器已启动          ║\x1b[0m');
+      console.log('\x1b[36m╚══════════════════════════════════════╝\x1b[0m');
+      console.log(`\x1b[33m欢迎, ${config.username}!\x1b[0m`);
+      console.log('\x1b[32m输入消息开始对话，输入 /help 查看命令\x1b[0m\n');
+    } else {
+      console.log('══════════════════════════════════════');
+      console.log('          控制台适配器已启动          ');
+      console.log('══════════════════════════════════════');
+      console.log(`欢迎, ${config.username}!`);
+      console.log('输入消息开始对话，输入 /help 查看命令\n');
     }
   }
 
+  /**
+   * 显示用户提示符
+   */
   private promptUser(): void {
-    if (this.rl && this.connected) {
+    if (this.rl) {
       this.rl.prompt();
     }
   }
-}
 
-// 设置默认导出
-export default ConsoleAdapter;
+  /**
+   * 适配器包装器 - 实现Adapter接口
+   */
+  public getAdapterWrapper(): Adapter {
+    const self = this;
+    return {
+      name: this.metadata.name,
+      
+      async connect(): Promise<void> {
+        await self.connect();
+      },
+      
+      async disconnect(): Promise<void> {
+        await self.disconnect();
+      },
+      
+      async sendMessage(target: string, content: string): Promise<void> {
+        const context: MessageContext = {
+          id: `console-${Date.now()}`,
+          target,
+          content,
+          source: 'system',
+          type: 'text',
+          timestamp: new Date()
+        };
+        await self.sendMessage(context);
+      },
+      
+      onMessage(callback: (message: Message) => void): void {
+        self.messageCallback = callback;
+      },
+      
+      isConnected(): boolean {
+        return self.isConnected();
+      }
+    };
+  }
+
+  // 实现Adapter接口的onMessage方法
+  public onMessage(callback: (message: Message) => void): void {
+    this.messageCallback = callback;
+  }
+
+  // 重写receiveMessage方法以调用回调
+  protected async onReceiveMessage(context: MessageContext): Promise<void> {
+    if (this.messageCallback && context.content) {
+      this.messageCallback(context.content);
+    }
+    await super.onReceiveMessage(context);
+  }
+}

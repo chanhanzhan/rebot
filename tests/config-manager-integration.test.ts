@@ -211,7 +211,7 @@ describe('ConfigManager Integration Tests', () => {
       };
 
       eventBus.on('config-backup-created', eventHandler);
-      await configManager.backupConfiguration();
+      await configManager.createBackup();
     });
   });
 
@@ -238,8 +238,8 @@ describe('ConfigManager Integration Tests', () => {
 
   describe('模板系统集成', () => {
     test('应该加载预定义模板', () => {
-      const templates = configManager.listTemplates();
-      const integrationTemplate = templates.find(t => t.name === 'integration-test');
+      const templates = configManager.getTemplates();
+      const integrationTemplate = templates.find((t: any) => t.name === 'integration-test');
       expect(integrationTemplate).toBeDefined();
     });
 
@@ -263,23 +263,37 @@ describe('ConfigManager Integration Tests', () => {
     });
 
     test('应该在批量更新时验证所有配置', async () => {
-      await expect(configManager.update({
-        'logging.level': 'invalid-level',
-        'performance.cpuLimit': 150
+      await expect(configManager.updateConfig({
+        logging: {
+          level: 'invalid-level' as any
+        },
+        performance: {
+          cpuLimit: 150,
+          maxConcurrentTasks: 10,
+          taskTimeout: 30000,
+          memoryLimit: '512MB'
+        }
       })).rejects.toThrow();
     });
 
     test('应该允许设置有效配置', async () => {
-      await expect(configManager.update({
-        'logging.level': 'debug',
-        'performance.cpuLimit': 90
+      await expect(configManager.updateConfig({
+        logging: {
+          level: 'debug'
+        },
+        performance: {
+          cpuLimit: 90,
+          maxConcurrentTasks: 10,
+          taskTimeout: 30000,
+          memoryLimit: '512MB'
+        }
       })).resolves.not.toThrow();
     });
   });
 
   describe('备份系统集成', () => {
     test('应该在配置变更时自动创建备份', async () => {
-      const initialBackups = configManager.listBackups().length;
+      const initialBackups = configManager.getBackups().length;
       
       // 启用自动备份
       configManager.updateMonitorConfig({
@@ -295,18 +309,18 @@ describe('ConfigManager Integration Tests', () => {
       // 等待备份创建
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      const finalBackups = configManager.listBackups().length;
+      const finalBackups = configManager.getBackups().length;
       expect(finalBackups).toBeGreaterThan(initialBackups);
     });
 
     test('应该正确恢复备份', async () => {
-      const backupId = await configManager.backupConfiguration();
+      const backupId = await configManager.createBackup();
       const originalValue = configManager.get('backup.test');
 
       await configManager.set('backup.test', 'modified-value');
       expect(configManager.get('backup.test')).toBe('modified-value');
 
-      await configManager.restoreFromBackup(backupId);
+      await configManager.restoreBackup(backupId);
       expect(configManager.get('backup.test')).toBe(originalValue);
     });
   });
@@ -422,16 +436,22 @@ describe('ConfigManager Integration Tests', () => {
   describe('完整工作流集成', () => {
     test('应该支持完整的配置管理工作流', async () => {
       // 1. 创建备份
-      const backupId = await configManager.backupConfiguration();
+      const backupId = await configManager.createBackup();
       
       // 2. 应用模板
       await configManager.applyTemplate('integration-test');
       
       // 3. 修改配置
-      await configManager.update({
-        'custom.workflow': 'test',
-        'adapters.mock.enabled': true
-      });
+      await configManager.updateConfig({
+          custom: {
+            workflow: 'test'
+          },
+          adapters: {
+            mock: {
+              enabled: true
+            }
+          }
+        });
       
       // 4. 验证配置
       expect(configManager.get('name')).toBe('Template Bot');
@@ -439,11 +459,11 @@ describe('ConfigManager Integration Tests', () => {
       expect(configManager.get('adapters.mock.enabled')).toBe(true);
       
       // 5. 导出配置
-      const exportedConfig = configManager.export('yaml');
+      const exportedConfig = configManager.exportConfig('yaml');
       expect(exportedConfig).toContain('Template Bot');
       
       // 6. 恢复备份
-      await configManager.restoreFromBackup(backupId);
+      await configManager.restoreBackup(backupId);
       
       // 7. 验证恢复
       expect(configManager.get('name')).not.toBe('Template Bot');

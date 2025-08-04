@@ -1,14 +1,13 @@
 
-import { BotFramework } from '../core/bot-framework';
-import { AdapterManager } from '../adapter/adapter-manager';
-import { ConfigManager } from '../config/config';
-import { DatabaseManager } from '../database/database-manager';
-import { FrameworkEventBus } from '../common/event-bus';
-import { Logger } from '../config/log';
-import { Message, PermissionLevel, Plugin } from '../common/types';
-import { PluginManager, PluginHttpService } from './plugin-manager';
-import { OneBotHTTPAdapter, PluginHttpRoute } from '../adapter/onebot-http-adapter';
-import { PluginFunction } from '../common/types';
+import { BotFramework } from '../core/bot-framework.js';
+import { AdapterManager } from '../adapter/adapter-manager.js';
+import { ConfigManager } from '../config/config.js';
+import { DatabaseManager } from '../database/database-manager.js';
+import { FrameworkEventBus } from '../common/event-bus.js';
+import { Logger } from '../config/log.js';
+import { Message, PermissionLevel, Plugin } from '../common/types.js';
+import { PluginManager, PluginHttpService, PluginHttpRoute } from './plugin-manager.js';
+import { PluginFunction } from '../common/types.js';
 import * as http from 'http';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -232,7 +231,7 @@ export abstract class BasePlugin implements IPlugin {
       pluginName: this.name
     }));
 
-    await this.pluginManager.startPluginHttpServer(this.name, port, fullRoutes);
+    await this.pluginManager.startPluginHttpServerWithRoutes(this.name, port, fullRoutes);
   }
 
   /**

@@ -94,9 +94,14 @@ describe('ConfigManager', () => {
     });
 
     test('应该能够批量更新配置', async () => {
-      await configManager.update({
-        'logging.level': 'debug',
-        'performance.maxConcurrentTasks': 5
+      await configManager.updateConfig({
+        logging: { level: 'debug' },
+        performance: { 
+          maxConcurrentTasks: 5,
+          taskTimeout: 30000,
+          memoryLimit: '512MB',
+          cpuLimit: 80
+        }
       });
 
       expect(configManager.get('logging.level')).toBe('debug');
@@ -155,20 +160,24 @@ describe('ConfigManager', () => {
 
   describe('配置模板', () => {
     test('应该能够列出模板', () => {
-      const templates = configManager.listTemplates();
+      const templates = configManager.getTemplates();
       expect(Array.isArray(templates)).toBe(true);
     });
 
     test('应该能够创建模板', async () => {
-      const template = {
-        name: 'Template Bot',
-        version: '1.0.0'
-      };
-
-      await configManager.createTemplate('test-template', '测试模板', template);
-      const savedTemplate = configManager.getTemplate('test-template');
-      expect(savedTemplate).toBeDefined();
-      expect(savedTemplate?.name).toBe('test-template');
+      await configManager.addTemplate({
+          name: 'test-template',
+          description: 'Test template',
+          version: '1.0.0',
+          config: { test: 'template-value' },
+          createdAt: new Date().toISOString(),
+          author: 'test'
+        });
+        
+        const templates = configManager.getTemplates();
+        const savedTemplate = templates.find(t => t.name === 'test-template');
+        expect(savedTemplate).toBeDefined();
+        expect(savedTemplate?.name).toBe('test-template');
     });
 
     test('应该能够应用模板', async () => {
@@ -177,7 +186,14 @@ describe('ConfigManager', () => {
         version: '2.0.0'
       };
 
-      await configManager.createTemplate('apply-test', '应用测试模板', template);
+      await configManager.addTemplate({
+          name: 'apply-test',
+          description: '应用测试模板',
+          version: '1.0.0',
+          config: template,
+          createdAt: new Date().toISOString(),
+          author: 'test'
+        });
       await configManager.applyTemplate('apply-test');
 
       expect(configManager.get('name')).toBe('Applied Bot');
@@ -187,27 +203,27 @@ describe('ConfigManager', () => {
 
   describe('配置备份和恢复', () => {
     test('应该能够创建备份', async () => {
-      const backupId = await configManager.backupConfiguration();
+      const backupId = await configManager.createBackup();
       expect(backupId).toBeDefined();
       expect(typeof backupId).toBe('string');
     });
 
     test('应该能够列出备份', async () => {
-      await configManager.backupConfiguration();
-      const backups = configManager.listBackups();
-      expect(backups.length).toBeGreaterThan(0);
-    });
+        await configManager.createBackup();
+        const backups = configManager.getBackups();
+        expect(backups.length).toBeGreaterThan(0);
+      });
 
     test('应该能够恢复备份', async () => {
       const originalName = configManager.get('name');
-      const backupId = await configManager.backupConfiguration();
+      const backupId = await configManager.createBackup();
 
       // 修改配置
       await configManager.set('name', 'Modified Bot');
       expect(configManager.get('name')).toBe('Modified Bot');
 
       // 恢复备份
-      await configManager.restoreFromBackup(backupId);
+      await configManager.restoreBackup(backupId);
       expect(configManager.get('name')).toBe(originalName);
     });
   });
@@ -286,13 +302,13 @@ describe('ConfigManager', () => {
 
   describe('配置导入导出', () => {
     test('应该能够导出为YAML', () => {
-      const yamlConfig = configManager.export('yaml');
+      const yamlConfig = configManager.exportConfig('yaml');
       expect(typeof yamlConfig).toBe('string');
       expect(yamlConfig.includes('name: Test Bot')).toBe(true);
     });
 
     test('应该能够导出为JSON', () => {
-      const jsonConfig = configManager.export('json');
+      const jsonConfig = configManager.exportConfig('json');
       expect(typeof jsonConfig).toBe('string');
       
       const parsed = JSON.parse(jsonConfig);
@@ -307,7 +323,7 @@ custom:
   imported: true
 `;
 
-      await configManager.import(yamlConfig, 'yaml');
+      await configManager.importConfig(yamlConfig, 'yaml');
       expect(configManager.get('name')).toBe('Imported Bot');
       expect(configManager.get('version')).toBe('3.0.0');
       expect(configManager.get('custom.imported')).toBe(true);
@@ -322,7 +338,7 @@ custom:
         }
       });
 
-      await configManager.import(jsonConfig, 'json');
+      await configManager.importConfig(jsonConfig, 'json');
       expect(configManager.get('name')).toBe('JSON Bot');
       expect(configManager.get('custom.fromJson')).toBe(true);
     });
@@ -357,16 +373,17 @@ custom:
     });
 
     test('应该处理无效的模板名称', () => {
-      const template = configManager.getTemplate('nonexistent');
+      const templates = configManager.getTemplates();
+      const template = templates.find(t => t.name === 'nonexistent');
       expect(template).toBeUndefined();
     });
 
     test('应该处理无效的备份ID', async () => {
-      await expect(configManager.restoreFromBackup('invalid-id')).rejects.toThrow();
+      await expect(configManager.restoreBackup('invalid-id')).rejects.toThrow();
     });
 
     test('应该处理无效的导入格式', async () => {
-      await expect(configManager.import('invalid yaml content', 'yaml')).rejects.toThrow();
+      await expect(configManager.importConfig('invalid yaml content', 'yaml')).rejects.toThrow();
     });
   });
 });

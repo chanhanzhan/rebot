@@ -91,7 +91,7 @@ export class ConfigExample {
 
     // 获取验证规则
     const rules = this.configManager.getValidationRules();
-    console.log('验证规则数量:', rules.size);
+    console.log('验证规则数量:', rules.length);
 
     // 添加自定义验证规则
     this.configManager.addValidationRule({

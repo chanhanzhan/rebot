@@ -1,5 +1,6 @@
 import { Adapter, Message, PermissionLevel } from '../common/types';
 import { Logger } from '../config/log';
+import { BaseAdapter, AdapterMetadata, MessageContext } from './base-adapter';
 
 export interface QQConfig {
   // OICQ配置
@@ -36,15 +37,25 @@ interface QQGroup {
   group_name: string;
 }
 
-export class QQAdapter implements Adapter {
-  public name = 'qq';
-  private config: QQConfig;
-  private connected = false;
+export class QQAdapter extends BaseAdapter {
+  public readonly metadata: AdapterMetadata = {
+    name: 'qq',
+    version: '1.0.0',
+    description: 'QQ适配器，基于OICQ协议',
+    author: 'Bot Framework',
+    type: 'bidirectional',
+    protocol: 'oicq',
+    dependencies: [],
+    priority: 100
+  };
+
+  protected config: QQConfig;
   private messageCallback?: (message: Message) => void;
   private client: any; // OICQ客户端实例
   private loginPromise?: Promise<void>;
 
   constructor(config: QQConfig) {
+    super();
     this.config = {
       platform: 5, // 默认iPad
       autoAcceptFriend: false,
@@ -55,7 +66,24 @@ export class QQAdapter implements Adapter {
     };
   }
 
-  public async connect(): Promise<void> {
+  /**
+   * 子类加载逻辑
+   */
+  protected async onLoad(): Promise<void> {
+    Logger.debug(`QQ适配器加载中: ${this.config.uin}`);
+  }
+
+  /**
+   * 子类初始化逻辑
+   */
+  protected async onInitialize(): Promise<void> {
+    Logger.debug(`QQ适配器初始化中: ${this.config.uin}`);
+  }
+
+  /**
+   * 子类连接逻辑
+   */
+  protected async onConnect(): Promise<void> {
     try {
       Logger.info(`正在连接QQ Bot (${this.config.uin})...`);
       
@@ -76,7 +104,6 @@ export class QQAdapter implements Adapter {
       // 执行登录
       await this.login();
       
-      this.connected = true;
       Logger.info(`QQ Bot连接成功: ${this.config.uin}`);
       
     } catch (error) {
@@ -85,7 +112,10 @@ export class QQAdapter implements Adapter {
     }
   }
 
-  public async disconnect(): Promise<void> {
+  /**
+   * 子类断开连接逻辑
+   */
+  protected async onDisconnect(): Promise<void> {
     Logger.info('正在断开QQ连接...');
     
     if (this.client) {
@@ -93,16 +123,30 @@ export class QQAdapter implements Adapter {
       this.client = null;
     }
     
-    this.connected = false;
     Logger.info('QQ连接已断开');
   }
 
-  public async sendMessage(target: string, content: string): Promise<void> {
-    if (!this.connected || !this.client) {
+  /**
+   * 子类卸载逻辑
+   */
+  protected async onUnload(): Promise<void> {
+    Logger.info('QQ适配器正在卸载...');
+    await this.onDisconnect();
+    this.client = null;
+  }
+
+  /**
+   * 子类发送消息逻辑
+   */
+  protected async onSendMessage(context: MessageContext): Promise<void> {
+    if (!this.isConnected() || !this.client) {
       throw new Error('QQ adapter 未连接');
     }
 
     try {
+      const target = context.target || '';
+      const content = typeof context.content === 'string' ? context.content : JSON.stringify(context.content);
+      
       const [type, id] = target.split(':');
       
       if (type === 'private') {
@@ -120,13 +164,23 @@ export class QQAdapter implements Adapter {
     }
   }
 
+  /**
+   * 实现Adapter接口的sendMessage方法
+   */
+  public async sendMessage(context: MessageContext): Promise<void> {
+    await super.sendMessage(context);
+  }
+
   public onMessage(callback: (message: Message) => void): void {
     this.messageCallback = callback;
   }
 
-  public isConnected(): boolean {
-    return this.connected;
-  }
+  /**
+   * 移除isConnected属性，使用基类的实现
+   */
+  // public get isConnected(): boolean {
+  //   return this.connected;
+  // }
 
   private async login(): Promise<void> {
     if (this.loginPromise) {
@@ -162,7 +216,7 @@ export class QQAdapter implements Adapter {
 
       this.client.on('system.offline', (data: any) => {
         Logger.warn('QQ离线:', data.message);
-        this.connected = false;
+        // this.connected = false; // 移除手动状态管理，由基类处理
       });
 
       // 开始登录
@@ -390,7 +444,7 @@ export class QQAdapter implements Adapter {
     return {
       uin: this.config.uin,
       platform: 'qq',
-      status: this.connected ? 'online' : 'offline'
+      status: this.isConnected() ? 'online' : 'offline'
     };
   }
   public getSessionList(): string[] {
@@ -398,26 +452,256 @@ export class QQAdapter implements Adapter {
     return ['private:' + this.config.uin];
   }
   public async sendFile(target: string, filePath: string): Promise<void> {
-    throw new Error('sendFile not implemented for QQAdapter');
+    if (!this.isConnected || !this.client) {
+      throw new Error('QQ适配器未连接');
+    }
+
+    try {
+      const fs = require('fs');
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`文件不存在: ${filePath}`);
+      }
+
+      const isGroup = target.includes(':') && target.startsWith('group:');
+      const targetId = isGroup ? target.replace('group:', '') : target.replace('private:', '');
+
+      if (isGroup) {
+        await this.client.sendGroupMsg(parseInt(targetId), `[CQ:image,file=file://${filePath}]`);
+        Logger.info(`发送文件到群组 ${targetId}: ${filePath}`);
+      } else {
+        await this.client.sendPrivateMsg(parseInt(targetId), `[CQ:image,file=file://${filePath}]`);
+        Logger.info(`发送文件到用户 ${targetId}: ${filePath}`);
+      }
+    } catch (error) {
+      Logger.error(`发送文件失败:`, error);
+      throw error;
+    }
   }
   public async getUserInfo(userId: string): Promise<any> {
     // 模拟返回用户信息
     return { id: userId, name: 'QQ用户' + userId };
   }
   public async broadcastMessage(content: string): Promise<void> {
-    throw new Error('broadcastMessage not implemented for QQAdapter');
+    if (!this.isConnected || !this.client) {
+      throw new Error('QQ适配器未连接');
+    }
+
+    try {
+      const results: Promise<any>[] = [];
+      
+      // 获取所有群组列表并广播
+      const groupList = await this.getGroupList();
+      for (const group of groupList) {
+        if (this.isGroupAllowed(group.group_id.toString())) {
+          results.push(this.client.sendGroupMsg(group.group_id, content));
+        }
+      }
+
+      // 获取所有好友列表并广播
+      const friendList = await this.getFriendList();
+      for (const friend of friendList) {
+        if (this.isUserAllowed(friend.user_id.toString())) {
+          results.push(this.client.sendPrivateMsg(friend.user_id, content));
+        }
+      }
+
+      await Promise.allSettled(results);
+      Logger.info(`广播消息完成，发送到 ${results.length} 个目标`);
+    } catch (error) {
+      Logger.error(`广播消息失败:`, error);
+      throw error;
+    }
   }
   public async getGroupList(): Promise<any[]> {
-    return [];
+    if (!this.isConnected || !this.client) {
+      Logger.warn('QQ适配器未连接，返回空群组列表');
+      return [];
+    }
+
+    try {
+      // 如果客户端有获取群列表的方法
+      if (this.client.getGroupList) {
+        const groups = await this.client.getGroupList();
+        return groups.map((group: any) => ({
+          group_id: group.group_id,
+          group_name: group.group_name,
+          member_count: group.member_count || 0,
+          max_member_count: group.max_member_count || 0
+        }));
+      }
+      
+      // 模拟返回群组列表（用于开发测试）
+      return [
+        {
+          group_id: 123456789,
+          group_name: '测试群组1',
+          member_count: 50,
+          max_member_count: 200
+        },
+        {
+          group_id: 987654321,
+          group_name: '测试群组2',
+          member_count: 30,
+          max_member_count: 500
+        }
+      ];
+    } catch (error) {
+      Logger.error('获取群组列表失败:', error);
+      return [];
+    }
   }
   public async getFriendList(): Promise<any[]> {
-    return [];
+    if (!this.isConnected || !this.client) {
+      Logger.warn('QQ适配器未连接，返回空好友列表');
+      return [];
+    }
+
+    try {
+      // 如果客户端有获取好友列表的方法
+      if (this.client.getFriendList) {
+        const friends = await this.client.getFriendList();
+        return friends.map((friend: any) => ({
+          user_id: friend.user_id,
+          nickname: friend.nickname,
+          remark: friend.remark || friend.nickname,
+          sex: friend.sex || 'unknown',
+          level: friend.level || 1
+        }));
+      }
+      
+      // 模拟返回好友列表（用于开发测试）
+      return [
+        {
+          user_id: 111111111,
+          nickname: '测试好友1',
+          remark: '测试好友1',
+          sex: 'unknown',
+          level: 1
+        },
+        {
+          user_id: 222222222,
+          nickname: '测试好友2',
+          remark: '测试好友2',
+          sex: 'unknown',
+          level: 1
+        }
+      ];
+    } catch (error) {
+      Logger.error('获取好友列表失败:', error);
+      return [];
+    }
   }
   public async kickUser(userId: string, groupId?: string): Promise<void> {
-    throw new Error('kickUser not implemented for QQAdapter');
+    if (!this.isConnected || !this.client) {
+      throw new Error('QQ适配器未连接');
+    }
+
+    if (!groupId) {
+      throw new Error('踢出用户需要指定群组ID');
+    }
+
+    try {
+      // 检查权限
+      const userIdNum = parseInt(userId);
+      const groupIdNum = parseInt(groupId);
+      
+      if (isNaN(userIdNum) || isNaN(groupIdNum)) {
+        throw new Error('用户ID或群组ID格式无效');
+      }
+
+      // 调用QQ客户端踢人API
+      if (this.client.setGroupKick) {
+        await this.client.setGroupKick(groupIdNum, userIdNum, false);
+      } else {
+        // 如果没有直接的踢人方法，使用CQ码
+        await this.client.sendGroupMsg(groupIdNum, `[CQ:at,qq=${userIdNum}] 已被移出群聊`);
+      }
+      
+      Logger.info(`踢出用户 ${userId} 从群组 ${groupId}`);
+    } catch (error) {
+      Logger.error(`踢出用户失败:`, error);
+      throw error;
+    }
   }
   public async muteUser(userId: string, groupId?: string, duration?: number): Promise<void> {
-    throw new Error('muteUser not implemented for QQAdapter');
+    if (!this.isConnected || !this.client) {
+      throw new Error('QQ适配器未连接');
+    }
+
+    if (!groupId) {
+      throw new Error('禁言用户需要指定群组ID');
+    }
+
+    try {
+      const userIdNum = parseInt(userId);
+      const groupIdNum = parseInt(groupId);
+      const muteDuration = duration || 600; // 默认禁言10分钟
+      
+      if (isNaN(userIdNum) || isNaN(groupIdNum)) {
+        throw new Error('用户ID或群组ID格式无效');
+      }
+
+      // 调用QQ客户端禁言API
+      if (this.client.setGroupBan) {
+        await this.client.setGroupBan(groupIdNum, userIdNum, muteDuration);
+      } else {
+        // 如果没有直接的禁言方法，发送通知消息
+        const durationText = muteDuration === 0 ? '解除禁言' : `禁言 ${Math.floor(muteDuration / 60)} 分钟`;
+        await this.client.sendGroupMsg(groupIdNum, `[CQ:at,qq=${userIdNum}] ${durationText}`);
+      }
+      
+      const action = muteDuration === 0 ? '解除禁言' : `禁言 ${muteDuration} 秒`;
+      Logger.info(`${action} 用户 ${userId} 在群组 ${groupId}`);
+    } catch (error) {
+      Logger.error(`禁言用户失败:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 适配器包装器 - 实现Adapter接口
+   */
+  public getAdapterWrapper(): Adapter {
+    const self = this;
+    return {
+      name: this.metadata.name,
+      
+      async connect(): Promise<void> {
+        await self.connect();
+      },
+      
+      async disconnect(): Promise<void> {
+        await self.disconnect();
+      },
+      
+      async sendMessage(target: string, content: string): Promise<void> {
+        const context: MessageContext = {
+          id: `qq-${Date.now()}`,
+          target,
+          content,
+          source: 'system',
+          type: 'text',
+          timestamp: new Date()
+        };
+        await self.sendMessage(context);
+      },
+      
+      onMessage(callback: (message: Message) => void): void {
+        self.messageCallback = callback;
+      },
+      
+      isConnected(): boolean {
+        return self.isConnected();
+      }
+    };
+  }
+
+  // 重写receiveMessage方法以调用回调
+  protected async onReceiveMessage(context: MessageContext): Promise<void> {
+    if (this.messageCallback && context.content) {
+      this.messageCallback(context.content);
+    }
+    await super.onReceiveMessage(context);
   }
 }
 

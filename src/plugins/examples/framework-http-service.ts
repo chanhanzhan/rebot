@@ -1,11 +1,9 @@
-import { BasePlugin } from '../plugin';
-import { Message } from '../../common/types';
+import { BasePlugin } from '../base-plugin';
 import { Logger } from '../../config/log';
+import { PluginMetadata, RouteDefinition } from '../base-plugin';
 import { FrameworkEventBus } from '../../common/event-bus';
-import { AdapterManager } from '../../adapter/adapter-manager';
-import { PluginManager } from '../../plugins/plugin-manager';
+import { Message } from '../../common/types';
 import * as http from 'http';
-import * as path from 'path';
 
 interface HTTPRoute {
   method: string;
@@ -20,19 +18,48 @@ interface PluginHTTPService {
   baseUrl: string;
 }
 
-export default class FrameworkHTTPService extends BasePlugin {
-  public name = 'framework-http-service';
-  public version = '1.0.0';
-  public description = '框架HTTP服务插件，提供核心HTTP接口和插件路由注册';
+export class FrameworkHTTPService extends BasePlugin {
+  public readonly metadata: PluginMetadata = {
+    name: '框架HTTP服务',
+    version: '1.0.0',
+    description: '框架HTTP服务插件，提供核心HTTP接口和插件路由注册',
+    author: 'Framework',
+    dependencies: [],
+    permissions: []
+  };
 
   private httpServer?: http.Server;
+  private pluginManager: any; // 添加pluginManager属性
+  private adapterManager: any; // 添加adapterManager属性
   private port: number = 3000;
   private host: string = '0.0.0.0';
   private pluginServices = new Map<string, PluginHTTPService>();
   private coreRoutes = new Map<string, HTTPRoute>();
+  private pluginRouteAllocations = new Map<string, string>(); // 插件名 -> 分配的路径前缀
+
+  constructor() {
+    super();
+    // 获取插件管理器和适配器管理器实例
+    const { PluginManager } = require('../../plugins/plugin-manager');
+    const { AdapterManager } = require('../../adapter/adapter-manager');
+    this.pluginManager = PluginManager.getInstance();
+    this.adapterManager = AdapterManager.getInstance();
+  }
+
+  public async onLoad(): Promise<void> {
+    // 子类的加载逻辑
+  }
+
+  public async onInitialize(): Promise<void> {
+    // 子类的初始化逻辑
+  }
+
+  public async onStart(): Promise<void> {
+    // 子类的启动逻辑
+  }
 
   public async load(): Promise<void> {
-    Logger.info(`[${this.name}] 正在加载框架HTTP服务...`);
+    Logger.info(`[${this.metadata.name}] 正在加载框架HTTP服务...`);
     
     // 初始化核心路由
     this.initializeCoreRoutes();
@@ -43,13 +70,34 @@ export default class FrameworkHTTPService extends BasePlugin {
     // 监听插件HTTP服务注册事件
     this.setupEventListeners();
     
-    Logger.info(`[${this.name}] 框架HTTP服务已启动: http://${this.host}:${this.port}`);
+    Logger.info(`[${this.metadata.name}] 框架HTTP服务已启动: http://${this.host}:${this.port}`);
+    Logger.info(`[${this.metadata.name}] 插件可通过声明式路由注册机制申请HTTP路径`);
+  }
+
+  async onStop(): Promise<void> {
+    // 停止HTTP服务器
+    if (this.httpServer) {
+      this.httpServer.close();
+      Logger.info(`[${this.metadata.name}] HTTP服务器已停止`);
+    }
+  }
+
+  async onUnload(): Promise<void> {
+    // 清理资源
+    this.pluginServices.clear();
+    this.pluginRouteAllocations.clear();
+    Logger.info(`[${this.metadata.name}] 插件资源已清理`);
+  }
+
+  getRoutes(): RouteDefinition[] {
+    // 返回此插件注册的路由
+    return [];
   }
 
   public async unload(): Promise<void> {
     if (this.httpServer) {
       this.httpServer.close();
-      Logger.info(`[${this.name}] HTTP服务器已关闭`);
+      Logger.info(`[${this.metadata.name}] HTTP服务器已关闭`);
     }
   }
 
@@ -86,7 +134,14 @@ export default class FrameworkHTTPService extends BasePlugin {
       handler: this.handleAdaptersList.bind(this)
     });
 
-    // 插件HTTP服务注册接口
+    // 插件HTTP路径申请接口（声明式路由注册）
+    this.coreRoutes.set('POST:/api/plugins/request-path', {
+      method: 'POST',
+      path: '/api/plugins/request-path',
+      handler: this.handlePluginPathRequest.bind(this)
+    });
+
+    // 插件HTTP服务注册接口（兼容旧版）
     this.coreRoutes.set('POST:/api/plugins/register-http', {
       method: 'POST',
       path: '/api/plugins/register-http',
@@ -98,6 +153,13 @@ export default class FrameworkHTTPService extends BasePlugin {
       method: 'GET',
       path: '/api/plugins/http-services',
       handler: this.handlePluginHTTPServicesList.bind(this)
+    });
+
+    // 插件路径分配列表接口
+    this.coreRoutes.set('GET:/api/plugins/path-allocations', {
+      method: 'GET',
+      path: '/api/plugins/path-allocations',
+      handler: this.handlePluginPathAllocations.bind(this)
     });
   }
 
@@ -157,7 +219,7 @@ export default class FrameworkHTTPService extends BasePlugin {
       this.sendError(res, 404, 'Not Found');
 
     } catch (error) {
-      Logger.error(`[${this.name}] HTTP请求处理错误:`, {
+      Logger.error(`[${this.metadata.name}] HTTP请求处理错误:`, {
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
         url: req.url,
@@ -166,11 +228,12 @@ export default class FrameworkHTTPService extends BasePlugin {
       this.sendError(res, 500, 'Internal Server Error');
     } finally {
       const duration = Date.now() - startTime;
-      Logger.debug(`[${this.name}] HTTP请求: ${req.method} ${req.url} (${duration}ms)`);
+      Logger.debug(`[${this.metadata.name}] HTTP请求: ${req.method} ${req.url} (${duration}ms)`);
     }
   }
 
   private findPluginRoute(method: string, pathname: string): HTTPRoute | null {
+    // 首先检查直接路径匹配的插件服务
     for (const [pluginName, service] of this.pluginServices) {
       for (const route of service.routes) {
         if ((route.method === method || route.method === 'ALL') && 
@@ -179,6 +242,29 @@ export default class FrameworkHTTPService extends BasePlugin {
         }
       }
     }
+
+    // 然后检查声明式路径分配
+    for (const [pluginName, allocatedPath] of this.pluginRouteAllocations) {
+      if (pathname.startsWith(allocatedPath)) {
+        // 查找该插件的路由处理器
+        const plugin = this.pluginManager.getAllPlugins().find((p: any) => p.name === pluginName);
+        if (plugin && typeof (plugin as any).handleHttpRequest === 'function') {
+          return {
+            method: 'ALL',
+            path: allocatedPath,
+            handler: async (req, res, body) => {
+              try {
+                await (plugin as any).handleHttpRequest(req, res, body, pathname.substring(allocatedPath.length));
+              } catch (error) {
+                Logger.error(`[${this.metadata.name}] 插件 ${pluginName} HTTP请求处理失败:`, error);
+                this.sendError(res, 500, `Plugin ${pluginName} request handling failed`);
+              }
+            }
+          };
+        }
+      }
+    }
+
     return null;
   }
 
@@ -240,7 +326,7 @@ export default class FrameworkHTTPService extends BasePlugin {
       },
       plugins: {
         count: plugins.length,
-        list: plugins.map(p => ({
+        list: plugins.map((p: any) => ({
           name: p.name,
           version: p.version,
           description: p.description
@@ -275,7 +361,7 @@ export default class FrameworkHTTPService extends BasePlugin {
       },
       plugins: {
         count: plugins.length,
-        loaded: plugins.filter(p => p.enabled).length
+        loaded: plugins.filter((p: any) => p.enabled).length
       },
       http_services: {
         count: this.pluginServices.size,
@@ -291,7 +377,7 @@ export default class FrameworkHTTPService extends BasePlugin {
   private async handlePluginsList(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const plugins = this.pluginManager.getAllPlugins();
     
-    const pluginList = plugins.map(plugin => ({
+    const pluginList = plugins.map((plugin: any) => ({
       name: plugin.name,
       version: plugin.version,
       description: plugin.description,
@@ -306,12 +392,127 @@ export default class FrameworkHTTPService extends BasePlugin {
   }
 
   private async handleAdaptersList(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const adapters = this.adapterManager.getAdapterStats();
-    
-    this.sendJSON(res, {
-      count: Array.isArray(adapters) ? adapters.length : 1,
-      adapters: Array.isArray(adapters) ? adapters : [adapters]
-    });
+    try {
+      const adapters = this.adapterManager.getAdapters().map((adapter: any) => ({
+        name: adapter.name,
+        connected: adapter.isConnected(),
+        type: adapter.constructor.name
+      }));
+
+      this.sendJSON(res, {
+        count: adapters.length,
+        adapters
+      });
+
+    } catch (error) {
+      Logger.error(`[${this.metadata.name}] 获取适配器列表失败:`, error);
+      this.sendError(res, 500, 'Internal server error');
+    }
+  }
+
+  // 处理插件HTTP路径申请（声明式路由注册）
+  private async handlePluginPathRequest(req: http.IncomingMessage, res: http.ServerResponse, body: any): Promise<void> {
+    try {
+      const { pluginName, requestedPath, description } = body;
+      
+      if (!pluginName || !requestedPath) {
+        this.sendError(res, 400, 'Missing pluginName or requestedPath');
+        return;
+      }
+
+      // 验证插件是否存在
+      const plugin = this.pluginManager.getAllPlugins().find((p: any) => p.name === pluginName);
+      if (!plugin) {
+        this.sendError(res, 404, `Plugin ${pluginName} not found`);
+        return;
+      }
+
+      // 验证插件是否实现了HTTP请求处理方法
+      if (typeof (plugin as any).handleHttpRequest !== 'function') {
+        this.sendError(res, 400, `Plugin ${pluginName} does not implement handleHttpRequest method`);
+        return;
+      }
+
+      // 标准化路径（确保以/开头，不以/结尾）
+      let normalizedPath = requestedPath.startsWith('/') ? requestedPath : '/' + requestedPath;
+      if (normalizedPath.length > 1 && normalizedPath.endsWith('/')) {
+        normalizedPath = normalizedPath.slice(0, -1);
+      }
+
+      // 检查路径是否已被占用
+      if (this.pluginRouteAllocations.has(pluginName)) {
+        const existingPath = this.pluginRouteAllocations.get(pluginName);
+        if (existingPath === normalizedPath) {
+          this.sendJSON(res, {
+            success: true,
+            message: `Plugin ${pluginName} already has path ${normalizedPath}`,
+            allocatedPath: normalizedPath
+          });
+          return;
+        } else {
+          this.sendError(res, 409, `Plugin ${pluginName} already has allocated path: ${existingPath}`);
+          return;
+        }
+      }
+
+      // 检查路径是否与其他插件冲突
+      for (const [otherPlugin, otherPath] of this.pluginRouteAllocations) {
+        if (normalizedPath.startsWith(otherPath) || otherPath.startsWith(normalizedPath)) {
+          this.sendError(res, 409, `Path ${normalizedPath} conflicts with plugin ${otherPlugin} path ${otherPath}`);
+          return;
+        }
+      }
+
+      // 检查路径是否与核心路由冲突
+      for (const [routeKey, route] of this.coreRoutes) {
+        if (normalizedPath.startsWith(route.path) || route.path.startsWith(normalizedPath)) {
+          this.sendError(res, 409, `Path ${normalizedPath} conflicts with core route ${route.path}`);
+          return;
+        }
+      }
+
+      // 分配路径
+      this.pluginRouteAllocations.set(pluginName, normalizedPath);
+      
+      Logger.info(`[${this.metadata.name}] 为插件 ${pluginName} 分配HTTP路径: ${normalizedPath}`);
+      
+      this.sendJSON(res, {
+        success: true,
+        message: `Path ${normalizedPath} allocated to plugin ${pluginName}`,
+        allocatedPath: normalizedPath,
+        description: description || `HTTP services for plugin ${pluginName}`
+      });
+
+    } catch (error) {
+      Logger.error(`[${this.metadata.name}] 处理插件路径申请失败:`, error);
+      this.sendError(res, 500, 'Internal server error');
+    }
+  }
+
+  // 处理插件路径分配列表查询
+  private async handlePluginPathAllocations(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const allocations = Array.from(this.pluginRouteAllocations.entries()).map(([pluginName, path]) => {
+        const plugin = this.pluginManager.getAllPlugins().find((p: any) => p.name === pluginName);
+        return {
+          pluginName,
+          allocatedPath: path,
+          pluginVersion: plugin?.version || 'unknown',
+          pluginDescription: plugin?.description || 'No description',
+          isActive: !!plugin
+        };
+      });
+
+      this.sendJSON(res, {
+        success: true,
+        allocations,
+        total: allocations.length
+      });
+
+    } catch (error) {
+      Logger.error(`[${this.metadata.name}] 获取插件路径分配列表失败:`, error);
+      this.sendError(res, 500, 'Internal server error');
+    }
   }
 
   private async handlePluginHTTPRegistration(req: http.IncomingMessage, res: http.ServerResponse, body: any): Promise<void> {
@@ -324,7 +525,7 @@ export default class FrameworkHTTPService extends BasePlugin {
       }
 
       // 验证插件是否存在
-      const plugin = this.pluginManager.getAllPlugins().find(p => p.name === pluginName);
+      const plugin = this.pluginManager.getAllPlugins().find((p: any) => p.name === pluginName);
       if (!plugin) {
         this.sendError(res, 404, 'Plugin not found');
         return;
@@ -344,7 +545,7 @@ export default class FrameworkHTTPService extends BasePlugin {
 
       this.pluginServices.set(pluginName, service);
       
-      Logger.info(`[${this.name}] 插件HTTP服务已注册: ${pluginName} -> ${service.baseUrl}`);
+      Logger.info(`[${this.metadata.name}] 插件HTTP服务已注册: ${pluginName} -> ${service.baseUrl}`);
       
       this.sendJSON(res, {
         success: true,
@@ -357,7 +558,7 @@ export default class FrameworkHTTPService extends BasePlugin {
       });
 
     } catch (error) {
-      Logger.error(`[${this.name}] 插件HTTP服务注册失败:`, error);
+      Logger.error(`[${this.metadata.name}] 插件HTTP服务注册失败:`, error);
       this.sendError(res, 500, 'Registration failed');
     }
   }
@@ -482,10 +683,10 @@ export default class FrameworkHTTPService extends BasePlugin {
       };
 
       this.pluginServices.set(pluginName, service);
-      Logger.info(`[${this.name}] 插件HTTP服务已注册: ${pluginName} -> ${service.baseUrl}`);
+      Logger.info(`[${this.metadata.name}] 插件HTTP服务已注册: ${pluginName} -> ${service.baseUrl}`);
       return true;
     } catch (error) {
-      Logger.error(`[${this.name}] 插件HTTP服务注册失败:`, error);
+      Logger.error(`[${this.metadata.name}] 插件HTTP服务注册失败:`, error);
       return false;
     }
   }
@@ -493,7 +694,7 @@ export default class FrameworkHTTPService extends BasePlugin {
   public unregisterPluginHTTPService(pluginName: string): boolean {
     if (this.pluginServices.has(pluginName)) {
       this.pluginServices.delete(pluginName);
-      Logger.info(`[${this.name}] 插件HTTP服务已注销: ${pluginName}`);
+      Logger.info(`[${this.metadata.name}] 插件HTTP服务已注销: ${pluginName}`);
       return true;
     }
     return false;

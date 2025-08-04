@@ -62,11 +62,11 @@ adapters:
         timeout: 0
         post_timeout: 0
       ws:
-        enabled: false
+        enabled: true
         host: "127.0.0.1"
         port: 6700
       ws_reverse:
-        enabled: false
+        enabled: true
         universal: ""
         api: ""
         event: ""
@@ -86,7 +86,7 @@ database:
   sqlite:
     path: "./data/bot.db"
   redis:
-    host: localhost
+    host: 192.168.1.237
     port: 6379
     password: ""
     db: 0

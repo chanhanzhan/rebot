@@ -1,5 +1,6 @@
 import { Adapter, Message, PermissionLevel } from '../common/types';
 import { Logger } from '../config/log';
+import { BaseAdapter, AdapterMetadata, MessageContext } from './base-adapter';
 import * as https from 'https';
 import * as http from 'http';
 
@@ -18,6 +19,8 @@ export interface TelegramConfig {
     timeout?: number;
   };
   parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2';
+  disableWebPagePreview?: boolean;
+  disableNotification?: boolean;
 }
 
 export interface TelegramMessage {
@@ -60,16 +63,26 @@ export interface InlineKeyboardButton {
   switch_inline_query_current_chat?: string;
 }
 
-export class TelegramAdapter implements Adapter {
-  public name = 'telegram';
-  private config: TelegramConfig;
-  private connected = false;
+export class TelegramAdapter extends BaseAdapter {
+  public readonly metadata: AdapterMetadata = {
+    name: 'telegram',
+    version: '1.0.0',
+    description: 'Telegram适配器，基于Bot API',
+    author: 'Bot Framework',
+    type: 'bidirectional',
+    protocol: 'telegram-bot-api',
+    dependencies: [],
+    priority: 100
+  };
+
+  protected config: TelegramConfig;
   private messageCallback?: (message: Message) => void;
   private botInfo?: any;
   private pollingInterval?: NodeJS.Timeout;
   private lastUpdateId = 0;
 
   constructor(config: TelegramConfig) {
+    super();
     this.config = {
       polling: { 
         enabled: true, 
@@ -81,7 +94,24 @@ export class TelegramAdapter implements Adapter {
     };
   }
 
-  public async connect(): Promise<void> {
+  /**
+   * 子类加载逻辑
+   */
+  protected async onLoad(): Promise<void> {
+    Logger.debug(`Telegram适配器加载中: ${this.config.token}`);
+  }
+
+  /**
+   * 子类初始化逻辑
+   */
+  protected async onInitialize(): Promise<void> {
+    Logger.debug(`Telegram适配器初始化中`);
+  }
+
+  /**
+   * 子类连接逻辑
+   */
+  protected async onConnect(): Promise<void> {
     try {
       Logger.info('正在连接到Telegram Bot API...');
       
@@ -97,7 +127,6 @@ export class TelegramAdapter implements Adapter {
         this.startPolling();
       }
       
-      this.connected = true;
       Logger.info(`Telegram Bot连接成功: @${this.botInfo?.username}`);
       
     } catch (error) {
@@ -118,7 +147,10 @@ export class TelegramAdapter implements Adapter {
     }
   }
 
-  public async disconnect(): Promise<void> {
+  /**
+   * 子类断开连接逻辑
+   */
+  protected async onDisconnect(): Promise<void> {
     Logger.info('正在断开Telegram连接...');
     
     if (this.pollingInterval) {
@@ -126,22 +158,29 @@ export class TelegramAdapter implements Adapter {
       this.pollingInterval = undefined;
     }
     
-    this.connected = false;
     Logger.info('Telegram连接已断开');
   }
 
-  public async sendMessage(target: string, content: string, options?: {
-    parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2';
-    replyMarkup?: InlineKeyboard;
-    disableWebPagePreview?: boolean;
-    disableNotification?: boolean;
-  }): Promise<void> {
-    if (!this.connected) {
+  /**
+   * 子类卸载逻辑
+   */
+  protected async onUnload(): Promise<void> {
+    Logger.info('Telegram适配器正在卸载...');
+    await this.onDisconnect();
+  }
+
+  /**
+   * 子类发送消息逻辑
+   */
+  protected async onSendMessage(context: MessageContext): Promise<void> {
+    if (!this.isConnected()) {
       throw new Error('Telegram adapter 未连接');
     }
 
     try {
-  
+      const target = context.target || '';
+      const content = typeof context.content === 'string' ? context.content : JSON.stringify(context.content);
+      
       let chatId = target;
       if (target.includes(':')) {
         chatId = target.split(':')[1] || target;
@@ -150,18 +189,14 @@ export class TelegramAdapter implements Adapter {
       const params: any = {
         chat_id: chatId,
         text: content,
-        parse_mode: options?.parseMode || this.config.parseMode || 'HTML'
+        parse_mode: this.config.parseMode || 'HTML'
       };
 
-      if (options?.replyMarkup) {
-        params.reply_markup = JSON.stringify(options.replyMarkup);
-      }
-
-      if (options?.disableWebPagePreview) {
+      if (this.config.disableWebPagePreview) {
         params.disable_web_page_preview = true;
       }
 
-      if (options?.disableNotification) {
+      if (this.config.disableNotification) {
         params.disable_notification = true;
       }
 
@@ -174,14 +209,61 @@ export class TelegramAdapter implements Adapter {
     }
   }
 
+  /**
+   * 发送消息
+   */
+  public async sendMessage(context: MessageContext): Promise<void> {
+    if (!this.isConnected()) {
+      throw new Error('Telegram adapter 未连接');
+    }
+
+    try {
+      const target = context.target || '';
+      const content = typeof context.content === 'string' ? context.content : JSON.stringify(context.content);
+      
+      let chatId = target;
+      if (target.includes(':')) {
+        chatId = target.split(':')[1] || target;
+      }
+
+      const params: any = {
+        chat_id: chatId,
+        text: content,
+        parse_mode: this.config.parseMode || 'HTML'
+      };
+
+      if (this.config.disableWebPagePreview) {
+        params.disable_web_page_preview = true;
+      }
+
+      if (this.config.disableNotification) {
+        params.disable_notification = true;
+      }
+
+      const response = await this.makeApiCall('sendMessage', params);
+      
+      if (!response.ok) {
+        throw new Error(`Telegram API错误: ${response.description}`);
+      }
+      
+      Logger.debug(`Telegram消息发送成功: ${target} -> ${content}`);
+    } catch (error) {
+      Logger.error('Telegram消息发送失败:', error);
+      throw error;
+    }
+  }
+
   public onMessage(callback: (message: Message) => void): void {
     Logger.debug('[Telegram适配器] 设置消息回调函数');
     this.messageCallback = callback;
   }
 
-  public isConnected(): boolean {
-    return this.connected;
-  }
+  /**
+   * 移除isConnected方法，使用基类的实现
+   */
+  // public isConnected(): boolean {
+  //   return this.connected;
+  // }
 
   // ====== 适配器通用/特有API补全 ======
   public async getBotInfo(): Promise<any> {
@@ -205,7 +287,7 @@ export class TelegramAdapter implements Adapter {
     return [];
   }
   public async sendFile(target: string, filePath: string): Promise<void> {
-    if (!this.connected) {
+    if (!this.isConnected) {
       throw new Error('Telegram adapter 未连接');
     }
 
@@ -238,7 +320,7 @@ export class TelegramAdapter implements Adapter {
     }
   }
   public async getUserInfo(userId: string): Promise<any> {
-    if (!this.connected) {
+    if (!this.isConnected) {
       throw new Error('Telegram adapter 未连接');
     }
 
@@ -266,7 +348,7 @@ export class TelegramAdapter implements Adapter {
     }
   }
   public async broadcastMessage(content: string): Promise<void> {
-    if (!this.connected) {
+    if (!this.isConnected) {
       throw new Error('Telegram adapter 未连接');
     }
 
@@ -300,7 +382,15 @@ export class TelegramAdapter implements Adapter {
     
     for (const userId of allUsers) {
       try {
-        await this.sendMessage(userId, content);
+        const context: MessageContext = {
+          id: `telegram-broadcast-${Date.now()}-${userId}`,
+          target: userId.toString(),
+          content: content,
+          source: 'system',
+          type: 'text',
+          timestamp: new Date()
+        };
+        await this.sendMessage(context);
         successCount++;
         Logger.debug(`广播消息成功发送给用户: ${userId}`);
       } catch (error) {
@@ -371,7 +461,7 @@ export class TelegramAdapter implements Adapter {
     return friendList;
   }
   public async kickUser(userId: string, groupId?: string): Promise<void> {
-    if (!this.connected) {
+    if (!this.isConnected) {
       throw new Error('Telegram adapter 未连接');
     }
 
@@ -393,7 +483,7 @@ export class TelegramAdapter implements Adapter {
   }
   
   public async muteUser(userId: string, groupId?: string, duration?: number): Promise<void> {
-    if (!this.connected) {
+    if (!this.isConnected) {
       throw new Error('Telegram adapter 未连接');
     }
 
@@ -500,7 +590,7 @@ export class TelegramAdapter implements Adapter {
     Logger.info('开始Telegram消息轮询...');
     
     const poll = async () => {
-      if (!this.connected) {
+      if (!this.isConnected) {
         Logger.debug('适配器已断开，停止轮询');
         return;
       }
@@ -527,7 +617,7 @@ export class TelegramAdapter implements Adapter {
       }
       
       // 继续轮询
-      if (this.connected) {
+      if (this.isConnected()) {
         this.pollingInterval = setTimeout(poll, this.config.polling?.interval || 1000);
       }
     };
@@ -611,8 +701,15 @@ export class TelegramAdapter implements Adapter {
       Logger.warn(`拒绝用户 ${userId} 的Telegram消息（权限不足）`);
       // 发送权限不足的提示
       try {
-        await this.sendMessage(telegramMessage.chat.id.toString(), 
-          '❌ 权限不足，您没有使用此机器人的权限。');
+        const context: MessageContext = {
+          id: `telegram-permission-${Date.now()}`,
+          target: telegramMessage.chat.id.toString(),
+          content: '❌ 权限不足，您没有使用此机器人的权限。',
+          source: 'system',
+          type: 'text',
+          timestamp: new Date()
+        };
+        await this.sendMessage(context);
       } catch (error) {
         Logger.error('发送权限提示失败:', error);
       }
@@ -817,20 +914,35 @@ export class TelegramAdapter implements Adapter {
   }): Promise<void> {
     const replyMarkup = this.createInlineKeyboard(buttons);
     
-    await this.sendMessage(chatId, text, {
-      ...options,
-      replyMarkup
-    });
+    const context: MessageContext = {
+      id: `telegram-buttons-${Date.now()}`,
+      target: chatId,
+      content: text,
+      source: 'system',
+      type: 'text',
+      timestamp: new Date()
+    };
+    
+    await this.sendMessage(context);
   }
 
   // 发送 Markdown 格式消息
   public async sendMarkdownMessage(target: string, content: string, version: 'Markdown' | 'MarkdownV2' = 'Markdown'): Promise<void> {
-    await this.sendMessage(target, content, { parseMode: version });
+    const context: MessageContext = {
+      id: `telegram-markdown-${Date.now()}`,
+      target: target,
+      content: content,
+      source: 'system',
+      type: 'text',
+      timestamp: new Date()
+    };
+    
+    await this.sendMessage(context);
   }
 
   // 发送图片
   public async sendPhoto(chatId: string, photoUrlOrFile: string, caption?: string, options?: { parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2'; replyMarkup?: InlineKeyboard; }): Promise<void> {
-    if (!this.connected) throw new Error('Telegram adapter 未连接');
+    if (!this.isConnected()) throw new Error('Telegram adapter 未连接');
     const params: any = {
       chat_id: chatId,
       photo: photoUrlOrFile,
@@ -843,7 +955,7 @@ export class TelegramAdapter implements Adapter {
 
   // 发送文件
   public async sendDocument(chatId: string, fileUrlOrFile: string, caption?: string, options?: { parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2'; replyMarkup?: InlineKeyboard; }): Promise<void> {
-    if (!this.connected) throw new Error('Telegram adapter 未连接');
+    if (!this.isConnected()) throw new Error('Telegram adapter 未连接');
     const params: any = {
       chat_id: chatId,
       document: fileUrlOrFile,
@@ -880,7 +992,7 @@ export class TelegramAdapter implements Adapter {
     parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2';
     replyMarkup?: InlineKeyboard;
   }): Promise<void> {
-    if (!this.connected) {
+    if (!this.isConnected) {
       throw new Error('Telegram adapter 未连接');
     }
 
@@ -907,7 +1019,7 @@ export class TelegramAdapter implements Adapter {
 
   // 删除消息
   public async deleteMessage(chatId: string, messageId: number): Promise<void> {
-    if (!this.connected) {
+    if (!this.isConnected) {
       throw new Error('Telegram adapter 未连接');
     }
 
@@ -981,7 +1093,15 @@ export class TelegramAdapter implements Adapter {
   }
   public async batchSendMessages(chatId: string, messages: { text: string, options?: any }[]): Promise<void> {
     for (const msg of messages) {
-      await this.sendMessage(chatId, msg.text, msg.options);
+      const context: MessageContext = {
+        id: `telegram-batch-${Date.now()}`,
+        target: chatId,
+        content: msg.text,
+        source: 'system',
+        type: 'text',
+        timestamp: new Date()
+      };
+      await this.sendMessage(context);
     }
   }
 
@@ -992,11 +1112,62 @@ export class TelegramAdapter implements Adapter {
 
   // ====== 消息引用 ======
   public async sendReplyMessage(chatId: string, text: string, replyToMessageId: number, options?: any): Promise<void> {
-    const params: any = {
-      reply_to_message_id: replyToMessageId,
-      ...options
+    const context: MessageContext = {
+      id: `telegram-reply-${Date.now()}`,
+      target: chatId,
+      content: text,
+      source: 'system',
+      type: 'text',
+      timestamp: new Date()
     };
-    await this.sendMessage(chatId, text, params);
+    
+    await this.sendMessage(context);
+  }
+
+  /**
+   * 适配器包装器 - 实现Adapter接口
+   */
+  public getAdapterWrapper(): Adapter {
+    const self = this;
+    return {
+      name: this.metadata.name,
+      
+      async connect(): Promise<void> {
+        await self.connect();
+      },
+      
+      async disconnect(): Promise<void> {
+        await self.disconnect();
+      },
+      
+      async sendMessage(target: string, content: string): Promise<void> {
+        const context: MessageContext = {
+          id: `telegram-${Date.now()}`,
+          target,
+          content,
+          source: 'system',
+          type: 'text',
+          timestamp: new Date()
+        };
+        await self.sendMessage(context);
+      },
+      
+      onMessage(callback: (message: Message) => void): void {
+        self.messageCallback = callback;
+      },
+      
+      isConnected(): boolean {
+        return self.isConnected();
+      }
+    };
+  }
+
+  // 重写receiveMessage方法以调用回调
+  protected async onReceiveMessage(context: MessageContext): Promise<void> {
+    if (this.messageCallback && context.content) {
+      this.messageCallback(context.content);
+    }
+    await super.onReceiveMessage(context);
   }
 }
 

@@ -37,21 +37,21 @@ onebot_http:
   cors_origin: "*"               # CORS允许的源，可以是字符串或数组
 
 # 示例配置
-  onebot_http:
-   http:
-     enabled: true
-     host: "0.0.0.0"
-     port: 5700
-   ws:
-     enabled: true
-     host: "0.0.0.0"
-     port: 6700
-   ws_reverse:
-     enabled: true
-     universal: "ws://localhost:8080/onebot/v11/ws"
-     api: "ws://localhost:8080/onebot/v11/ws/api"
-     event: "ws://localhost:8080/onebot/v11/ws/event"
-   access_token: ""
-   plugin_routes:
-     enabled: true
-     base_path: "/plugins"
+# onebot_http:
+#   http:
+#     enabled: true
+#     host: "0.0.0.0"
+#     port: 5700
+#   ws:
+#     enabled: true
+#     host: "0.0.0.0"
+#     port: 6700
+#   ws_reverse:
+#     enabled: true
+#     universal: "ws://localhost:8080/onebot/v11/ws"
+#     api: "ws://localhost:8080/onebot/v11/ws/api"
+#     event: "ws://localhost:8080/onebot/v11/ws/event"
+#   access_token: "your_access_token_here"
+#   plugin_routes:
+#     enabled: true
+#     base_path: "/plugins"

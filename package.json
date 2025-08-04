@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "基于适配器的bot机器人框架",
   "main": "dist/app.js",
+  "type": "commonjs",
   "scripts": {
     "build": "tsc",
     "start": "node dist/app.js",
@@ -28,8 +29,7 @@
     "sqlite3": "^5.1.6",
     "vm2": "^3.9.19",
     "winston": "^3.8.2",
-    "ws": "^8.18.3",
-    "yaml": "^2.8.0"
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

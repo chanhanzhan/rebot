@@ -7,7 +7,6 @@ import { Logger } from '../../../src/config/log';
 export class HelloApp {
   private plugin: any;
   private greetings: string[] = [
-    '你好！',
     'Hello!',
     'Hi there!',
     '嗨！',
@@ -18,7 +17,12 @@ export class HelloApp {
   ];
 
   constructor(plugin: any) {
-    this.plugin = plugin;
+    // 初始化插件实例并设置必要的权限和触发器属性
+    this.plugin = {
+      ...plugin,
+      permission: PermissionLevel.USER,
+      triggers: ['hello', 'hi', '你好']
+    };
   }
 
   /**

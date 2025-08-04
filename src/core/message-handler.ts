@@ -167,25 +167,24 @@ export class MessageHandler {
 
   private loadConfiguration(): void {
     const config = this.configManager.getConfig();
-    if (config.messageHandler) {
-      this.maxRetries = config.messageHandler.maxRetries || 3;
-      this.retryDelay = config.messageHandler.retryDelay || 1000;
-      this.enableRateLimit = config.messageHandler.enableRateLimit !== false;
-      this.rateLimitWindow = config.messageHandler.rateLimitWindow || 60000;
-      this.rateLimitMax = config.messageHandler.rateLimitMax || 30;
-      this.maxConcurrentMessages = config.messageHandler.maxConcurrentMessages || 10;
-      this.cacheEnabled = config.messageHandler.cacheEnabled || false;
-      this.cacheMaxSize = config.messageHandler.cacheMaxSize || 1000;
-      this.cacheTTL = config.messageHandler.cacheTTL || 300000;
+    if (config.messageHandlers) {
+      this.maxRetries = config.messageHandlers.maxRetries || 3;
+      this.retryDelay = config.messageHandlers.retryDelay || 1000;
+      this.enableRateLimit = config.messageHandlers.enableRateLimit !== false;
+      this.rateLimitWindow = config.messageHandlers.rateLimitWindow || 60000;
+      this.rateLimitMax = config.messageHandlers.rateLimitMax || 30;
+      this.maxConcurrentMessages = config.messageHandlers.maxConcurrentMessages || 10;
+      this.cacheEnabled = config.messageHandlers.cacheEnabled || false;
+      this.cacheMaxSize = config.messageHandlers.cacheMaxSize || 1000;
+      this.cacheTTL = config.messageHandlers.cacheTTL || 300000;
       
       // 加载消息过滤配置
-        if (config.messageHandler.filter) {
-          this.messageFilter = { 
-            ...this.messageFilter, 
-            ...config.messageHandler.filter,
-            patterns: config.messageHandler.filter.patterns.map(p => new RegExp(p))
-          };
-        }
+      if (config.messageHandlers?.filter) {
+        this.messageFilter = {
+          ...config.messageHandlers.filter,
+          patterns: config.messageHandlers.filter.patterns.map((p: string) => new RegExp(p))
+        };
+      }
     }
   }
 

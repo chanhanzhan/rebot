@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
-import { EventType, FrameworkEvent, LogEntry, LogLevel, LogCategory } from './event-types';
-import { Logger } from '../config/log';
+import { EventType, FrameworkEvent, LogEntry, LogLevel, LogCategory } from './event-types.js';
+import { Logger } from '../config/log.js';
 
 export interface EventListener {
   id: string;

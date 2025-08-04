@@ -75,6 +75,7 @@ export interface CacheEntry<T = any> {
 export interface DatabaseInterface {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
+  isConnected(): boolean;
   get(key: string): Promise<string | null>;
   set(key: string, value: string, ttl?: number): Promise<void>;
   delete(key: string): Promise<void>;
@@ -130,6 +131,10 @@ export class MemoryDatabase implements DatabaseInterface {
     this.transactions.clear();
     this.watchedKeys.clear();
     Logger.info('[内存数据库] 已断开连接');
+  }
+
+  isConnected(): boolean {
+    return true; // 内存数据库始终连接
   }
 
   async get(key: string): Promise<string | null> {
@@ -669,6 +674,12 @@ export class DatabaseManager extends EventEmitter {
       Logger.error('[数据库管理器] 断开数据库连接时出错:', error);
       throw error;
     }
+  }
+
+  public isConnected(): boolean {
+    return this.database && typeof this.database.isConnected === 'function' 
+      ? this.database.isConnected() 
+      : true; // 默认内存数据库总是连接的
   }
 
   // 包装操作以添加统计和缓存

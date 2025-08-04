@@ -1,6 +1,6 @@
 # Redis数据库配置
 redis:
-  host: localhost
+  host: 192.168.1.237
   port: 6379
   password: ""
   db: 0

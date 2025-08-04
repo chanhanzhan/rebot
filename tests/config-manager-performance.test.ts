@@ -160,7 +160,7 @@ describe('ConfigManager Performance Tests', () => {
       }
 
       const startTime = performance.now();
-      await configManager.update(updates);
+      await configManager.updateConfig(updates);
       const endTime = performance.now();
       const duration = endTime - startTime;
       
@@ -207,7 +207,7 @@ describe('ConfigManager Performance Tests', () => {
       
       const backupIds: string[] = [];
       for (let i = 0; i < 10; i++) {
-        const backupId = await configManager.backupConfiguration();
+        const backupId = await configManager.createBackup();
         backupIds.push(backupId);
       }
       
@@ -220,10 +220,10 @@ describe('ConfigManager Performance Tests', () => {
     });
 
     test('应该快速恢复备份', async () => {
-      const backupId = await configManager.backupConfiguration();
+      const backupId = await configManager.createBackup();
       
       const startTime = performance.now();
-      await configManager.restoreFromBackup(backupId);
+      await configManager.restoreBackup(backupId);
       const endTime = performance.now();
       const duration = endTime - startTime;
       
@@ -237,7 +237,7 @@ describe('ConfigManager Performance Tests', () => {
       const startTime = performance.now();
       
       for (let i = 0; i < 10; i++) {
-        configManager.export('yaml');
+        configManager.exportConfig('yaml');
       }
       
       const endTime = performance.now();
@@ -248,10 +248,10 @@ describe('ConfigManager Performance Tests', () => {
     });
 
     test('应该快速导入配置', async () => {
-      const configData = configManager.export('yaml');
+      const configData = configManager.exportConfig('yaml');
       
       const startTime = performance.now();
-      await configManager.import(configData, 'yaml');
+      await configManager.importConfig(configData, 'yaml');
       const endTime = performance.now();
       const duration = endTime - startTime;
       
